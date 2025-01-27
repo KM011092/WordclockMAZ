@@ -66,7 +66,7 @@ RTC_DS3231 rtc;                                                                 
 int lastRequest = 0;                                                                 // Variable to control RTC requests
 int rtcStarted = 0;                                                                  // Variable to control whether RTC has been initialized
 int delayval = 250;                                                                  // delay in milliseconds
-int iYear, iMonth, iDay, iHour, iMinute, iSecond, iWeekDay;                          // variables for RTC-module read time:
+int iYear, iMonth, iDay, iHour, iMinute, iSecond, iWeekDay, iSecondLED;                        // variables for RTC-module read time:
 String timeZone = DEFAULT_TIMEZONE;                                                  // Time server settings
 String ntpServer = DEFAULT_NTP_SERVER;                                               // Time server settings
 String UpdatePath = "-";                                                             // Update via Hostname
@@ -263,6 +263,7 @@ void loop() {
     } else {
       pixels.setBrightness(intensity);  // DAY brightness
       ShowTheTime();
+      updateSecondsLED(iSecondLED);
     }
 
     ESP.wdtFeed();  // Reset watchdog timer
@@ -1654,6 +1655,9 @@ void rtcReadTime() {
     iMinute = (int)(now.minute());
     iSecond = (int)(now.second());
     iWeekDay = (int)(now.dayOfTheWeek());
+    // KM Start
+    iSecondLED = (int)(now.second());
+    //KM End
 
     // Print out time if minute has changed
     if (iHour != oldHour) {
@@ -1673,10 +1677,24 @@ void rtcReadTime() {
       Serial.print(iMinute);
       Serial.print(":");
       Serial.println(iSecond);
+      // KM Start
+      Serial.println(iSecond);
+      // KM end
     }
   }
 }
 
+// ###########################################################################################################################################
+// # KM Function to update iSecondsLED
+// #############################################################################################################
+
+//KM Start
+void updateSecondsLED(int iSecondLED) {
+    secondsStrip.clear();                         // Clear all LEDs
+    secondsStrip.setPixelColor(iSecondLED, 255, 0, 0); // Light up the current second in red
+    secondsStrip.show();                          // Update the LEDs
+}
+//KM End
 
 // ###########################################################################################################################################
 // # Show the IP-address on the display:
@@ -2163,6 +2181,12 @@ void handleTime() {
       iMinute = mi;
       iSecond = sec;
     }
+    // KM Start
+    // Update iSecondLED and seconds LEDs
+    iSecondLED = sec;  // Use the current second for the seconds LEDs
+    updateSecondsLED(iSecondLED);  // Call the function to update the seconds LEDs
+    // KM End
+
     if (timedebug == 1) {
       Serial.print(ho);
       Serial.print(':');
