@@ -1890,16 +1890,16 @@ void showMinutes(int minutes) {
     int ledNr = 0;
     if (switchLEDOrder) {  // clockwise
       switch (i) {
-        case 1: ledNr = 110; break;
-        case 2: ledNr = 111; break;
-        case 3: ledNr = 112; break;
-        case 4: ledNr = 113; break;
+        case 1: ledNr = 111; break;
+        case 2: ledNr = 110; break;
+        case 3: ledNr = 113; break;
+        case 4: ledNr = 112; break;
       }
     } else {  // anti clockwise
       switch (i) {
-        case 1: ledNr = 113; break;
+        case 1: ledNr = 111; break;
         case 2: ledNr = 112; break;
-        case 3: ledNr = 111; break;
+        case 3: ledNr = 113; break;
         case 4: ledNr = 110; break;
       }
     }
