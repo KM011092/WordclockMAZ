@@ -159,6 +159,7 @@ void setup() {
   Serial.println("######################################################################");
   // KM Start: Initialize the seconds LED strip
   secondsStrip.begin();
+  secondsStrip.setBrightness(intensity); // Match day brightness initially
   secondsStrip.show(); // Clear the LEDs on the seconds strip
   // KM End 
   
@@ -166,6 +167,9 @@ void setup() {
   pixels.begin();                   // Init the NeoPixel library
   readEEPROM();                     // get persistent data from EEPROM
   pixels.setBrightness(intensity);  // Set LED brightness
+  // KM Start
+  secondsStrip.setBrightness(intensity);
+  // KM end
   DisplayTest();                    // Perform the LED test
   SetWLAN();                        // Show SET WLAN text
   WIFI_login();                     // WiFiManager
@@ -262,6 +266,9 @@ void loop() {
       }
     } else {
       pixels.setBrightness(intensity);  // DAY brightness
+      // KM Start
+      secondsStrip.setBrightness(intensity);
+      // KM end
       ShowTheTime();
       updateSecondsLED(iSecondLED);
     }
@@ -1691,7 +1698,8 @@ void rtcReadTime() {
 //KM Start
 void updateSecondsLED(int iSecondLED) {
     secondsStrip.clear();                         // Clear all LEDs
-    secondsStrip.setPixelColor(iSecondLED, 255, 0, 0); // Light up the current second in red
+    secondsStrip.setPixelColor(iSecondLED, redVal, greenVal, blueVal); // Light up the current second in red
+    secondsStrip.setBrightness(pixels.getBrightness());
     secondsStrip.show();                          // Update the LEDs
 }
 //KM End
@@ -2243,6 +2251,9 @@ void ShowTheTime() {
 void DayNightMode(int displayonMin, int displayonMax) {
   if (iHour > displayonMin && iHour < displayonMax) {
     pixels.setBrightness(intensity);  // Day brightness
+    // KM Start
+    secondsStrip.setBrightness(intensity);
+    // KM end
     NightModeActive = false;
     ShowTheTime();
   } else {
@@ -2354,6 +2365,9 @@ void ledsON() {
   server1->send(200, "text/plain", "WordClock LEDs set to ON");
   Serial.println("WordClock LEDs set to ON");
   pixels.setBrightness(intensity);
+  // KM Start
+  secondsStrip.setBrightness(intensity);
+  // KM end
   RESTmanLEDsON = true;
   LEDsON = true;
   pixels.show();
