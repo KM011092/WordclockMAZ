@@ -69,7 +69,9 @@ int server1port = 55555;  // REST function web server port
 int powersupply = 0;      // Flag for the power supply note text and to raise the limit for the intensity from 128 to 255
 int useRTC = 1;           // Flag to disable the RTC board (No configuration needed. Set automatically after entering and saving the web config once)
 int DEspecial1 = 0;       // DE special function only: Change between "VIERTEL VOR" = "0" and "DREIVIERTEL" = "1"
-
+// KM Start: Variable for seconds display variant
+int secondsDisplayVariant = 2; // 0: Default, 1: Staggered variant
+// KM End
 
 // ###########################################################################################################################################
 // # Night mode option defaults:

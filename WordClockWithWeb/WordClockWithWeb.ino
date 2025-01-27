@@ -1695,14 +1695,62 @@ void rtcReadTime() {
 // # KM Function to update iSecondsLED
 // #############################################################################################################
 
-//KM Start
-void updateSecondsLED(int iSecondLED) {
-    secondsStrip.clear();                         // Clear all LEDs
-    secondsStrip.setPixelColor(iSecondLED, redVal, greenVal, blueVal); // Light up the current second in red
-    secondsStrip.setBrightness(pixels.getBrightness());
-    secondsStrip.show();                          // Update the LEDs
+// KM Start: Update seconds LED strip with variants
+void updateSecondsLED(int second) {
+    secondsStrip.clear(); // Turn off all LEDs
+    Serial.print("Seconds Display Variant: ");
+    Serial.println(secondsDisplayVariant);
+
+    static unsigned long lastSecondMillis = 0; // Tracks when the second starts
+
+    if (secondsDisplayVariant == 0) {
+        // Default variant: Single LED lit for the current second
+        secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
+
+    } else if (secondsDisplayVariant == 1 || secondsDisplayVariant == 2) {
+        // Variant 1 and Variant 2: Staggered effect
+        // Variant 2 adds a rainbow gradient
+
+        // Calculate the block (group of 5 seconds) and the position within the block
+        int block = second / 5;               // Block index (0-11)
+        int positionInBlock = second % 5;    // Position within the block (0-4)
+
+        // Calculate the start and end LEDs for the current block
+        int startLED = block * 5;            // Start LED for the block
+        int currentLED = startLED + positionInBlock;
+
+        // Light up all LEDs in the current block up to the current second
+        for (int i = startLED; i <= currentLED; i++) {
+            if (secondsDisplayVariant == 2) {
+                // Rainbow gradient: Calculate the color based on LED position
+                uint32_t color = secondsStrip.ColorHSV(
+                    map(i, 0, 59, 49152, 0), // Map position to HSV hue (purple to red)
+                    255,                     // Maximum saturation
+                    255                      // Maximum brightness
+                );
+                secondsStrip.setPixelColor(i, color);
+            } else {
+                // Variant 1: Use the WordClock's default color
+                secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
+            }
+        }
+
+        // Handle staggered turning off for the previous block
+        if (millis() - lastSecondMillis >= 1000) { // Reset every second
+            lastSecondMillis = millis();
+        }
+
+        // Turn off LEDs in the current block after 0.2 seconds
+        if (millis() - lastSecondMillis > 200) {
+            for (int i = startLED; i < startLED + 5; i++) {
+                secondsStrip.setPixelColor(i, 0, 0, 0); // Turn off LEDs in the block
+            }
+        }
+    }
+
+    secondsStrip.setBrightness(intensity); // Match brightness to day mode
+    secondsStrip.show(); // Apply updates to the strip
 }
-//KM End
 
 // ###########################################################################################################################################
 // # Show the IP-address on the display:
