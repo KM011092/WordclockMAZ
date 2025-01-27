@@ -33,7 +33,11 @@ int RTC_I2C_ADDRESS = 0x68;  // I2C adress of the RTC  DS3231 (Chip on ZS-042 Bo
 #define AP_TIMEOUT 240       // Timeout in seconds for AP / WLAN config
 #define PIN D6               // Arduino-Pin connected to the NeoPixels
 #define NUMPIXELS 114        // How many NeoPixels are attached to the Arduino?
-
+// KM Start: Add second LED strip for seconds
+#define SECONDS_PIN D7           // Pin for the seconds LED strip
+#define SECONDS_NUMPIXELS 60     // Number of LEDs in the seconds strip
+Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ800);
+// KM End
 
 // ###########################################################################################################################################
 // # LED defaults:

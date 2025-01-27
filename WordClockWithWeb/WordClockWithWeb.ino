@@ -157,6 +157,11 @@ void setup() {
   Serial.print("# WordClock startup of version: ");
   Serial.println(WORD_CLOCK_VERSION);
   Serial.println("######################################################################");
+  // KM Start: Initialize the seconds LED strip
+  secondsStrip.begin();
+  secondsStrip.show(); // Clear the LEDs on the seconds strip
+  // KM End 
+  
   dunkel();                         // Switch display black
   pixels.begin();                   // Init the NeoPixel library
   readEEPROM();                     // get persistent data from EEPROM
@@ -2369,18 +2374,38 @@ void DisplayTest() {
     Serial.println("Display Test...");
     pixels.setBrightness(64);
 
+    // KM Start: Initialize seconds strip
+    secondsStrip.setBrightness(64); // Optional, set brightness for the seconds LED strip
+    secondsStrip.clear();
+    secondsStrip.show();
+    // KM End
+
+    // Test the main LED strip (minute LEDs)
     for (int i = 0; i < NUMPIXELS; i++) {
-      setLED(i, i, 0);
+      setLED(i, i, 0); // Turn on one LED at a time
       pixels.show();
     }
 
     for (int i = 0; i < NUMPIXELS; i++) {
-      setLED(i, i, 1);
+      setLED(i, i, 1); // Turn on and off one LED at a time
       pixels.show();
       delay(50);
-      pixels.setPixelColor(i, 0, 0, 0);
+      pixels.setPixelColor(i, 0, 0, 0); // Turn off LED
     }
 
+    // KM Start: Test the seconds LED strip
+    for (int i = 0; i < SECONDS_NUMPIXELS; i++) {
+      secondsStrip.setPixelColor(i, secondsStrip.Color(0, 0, 255)); // Light up LEDs in blue
+      secondsStrip.show();
+      delay(50); // Add delay for effect
+      secondsStrip.setPixelColor(i, 0, 0, 0); // Turn off LED
+      secondsStrip.show();
+    }
+    secondsStrip.clear(); // Clear the seconds LED strip after the test
+    secondsStrip.show();
+    // KM End
+
+    // Clear the main LED strip
     pixels.setPixelColor(NUMPIXELS, 0, 0, 0);
     pixels.show();
   }
