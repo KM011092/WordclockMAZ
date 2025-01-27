@@ -84,7 +84,9 @@ bool RESTmanLEDsON = true;                                                      
 bool UpdateAvailable = false;                                                        // Global flag to check for avaiable updates
 String AvailableVersion = "-";                                                       // Global string to check for avaiable updates
 bool NightModeActive = false;                                                        // Global flag to track if Night Mode is currently active - used for PING function
-
+// KM Start: Global variable for variant rotation
+unsigned long lastVariantChange = 0; // Tracks the last time the variant was changed
+// KM End
 
 // ###########################################################################################################################################
 // # Parameter record to store to the EEPROM of the ESP:
@@ -220,12 +222,21 @@ void loop() {
   // Check WiFi connection and reconnect if needed:
   if (WiFi.status() != WL_CONNECTED) {
     WIFI_login();  // WiFi inactive --> Reconnect to it...
-  } else {         // Wifi active --> Sort some atoms in the univers and show the time...
+  } else {         // Wifi active --> Sort some atoms in the universe and show the time...
     // Check, whether something has been entered on Config Page
     checkClient();
     ESP.wdtFeed();  // Reset watchdog timer
     handleTime();   // handle NTP / RTC time
     delay(750);
+
+    // KM Start: Rotate seconds display variant every 5 minutes
+    if (millis() - lastVariantChange >= 300000) { // 300,000 ms = 5 minutes
+      secondsDisplayVariant = (secondsDisplayVariant + 1) % 6; // Rotate through variants 0-5
+      lastVariantChange = millis();
+      Serial.print("Seconds display variant changed to: ");
+      Serial.println(secondsDisplayVariant);
+    }
+    // KM End
 
     if (switchRainBow == 2) {  // RainBow variant 2 effect active - color change every new minute
       if (iSecond == 0) {
@@ -268,9 +279,9 @@ void loop() {
       pixels.setBrightness(intensity);  // DAY brightness
       // KM Start
       secondsStrip.setBrightness(intensity);
-      // KM end
       ShowTheTime();
-      updateSecondsLED(iSecondLED);
+      updateSecondsLED(iSecondLED); // Update seconds display with current variant
+      // KM End
     }
 
     ESP.wdtFeed();  // Reset watchdog timer
@@ -296,6 +307,7 @@ void loop() {
     AvailableVersion = "-";
   }
 }
+
 
 
 // ###########################################################################################################################################
@@ -1698,60 +1710,69 @@ void rtcReadTime() {
 // KM Start: Update seconds LED strip with variants
 void updateSecondsLED(int second) {
     secondsStrip.clear(); // Turn off all LEDs
-    Serial.print("Seconds Display Variant: ");
-    Serial.println(secondsDisplayVariant);
 
-    static unsigned long lastSecondMillis = 0; // Tracks when the second starts
+    unsigned long currentMillis = millis();
+    int timeInSecond = currentMillis % 1000; // Time within the current second (0-999)
 
-    if (secondsDisplayVariant == 0) {
-        // Default variant: Single LED lit for the current second
-        secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
+    switch (secondsDisplayVariant) {
+        case 0: // Default: Single LED lit for the current second
+            secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
+            break;
 
-    } else if (secondsDisplayVariant == 1 || secondsDisplayVariant == 2) {
-        // Variant 1 and Variant 2: Staggered effect
-        // Variant 2 adds a rainbow gradient
+        case 1: { // Pulsating Effect
+            int brightness = (int)(128 + 127 * sin(PI * timeInSecond / 1000.0));
+            uint8_t r = (redVal * brightness) / 255;
+            uint8_t g = (greenVal * brightness) / 255;
+            uint8_t b = (blueVal * brightness) / 255;
+            secondsStrip.setPixelColor(second, r, g, b);
+            break;
+        }
 
-        // Calculate the block (group of 5 seconds) and the position within the block
-        int block = second / 5;               // Block index (0-11)
-        int positionInBlock = second % 5;    // Position within the block (0-4)
+        case 2: { // Running Effect (Progressive Trail)
+            for (int i = 0; i < 5; i++) {
+                int ledIndex = (second - i + 60) % 60; // Handle wraparound
+                uint8_t factor = 255 - (i * 50);       // Gradually decrease brightness
+                uint8_t r = (redVal * factor) / 255;
+                uint8_t g = (greenVal * factor) / 255;
+                uint8_t b = (blueVal * factor) / 255;
+                secondsStrip.setPixelColor(ledIndex, r, g, b);
+            }
+            break;
+        }
 
-        // Calculate the start and end LEDs for the current block
-        int startLED = block * 5;            // Start LED for the block
-        int currentLED = startLED + positionInBlock;
-
-        // Light up all LEDs in the current block up to the current second
-        for (int i = startLED; i <= currentLED; i++) {
-            if (secondsDisplayVariant == 2) {
-                // Rainbow gradient: Calculate the color based on LED position
-                uint32_t color = secondsStrip.ColorHSV(
-                    map(i, 0, 59, 49152, 0), // Map position to HSV hue (purple to red)
-                    255,                     // Maximum saturation
-                    255                      // Maximum brightness
-                );
+        case 3: { // Rotating Rainbow
+            for (int i = 0; i < 60; i++) {
+                uint32_t color = secondsStrip.ColorHSV((i * 65536 / 60 + millis() / 10) % 65536, 255, 255);
                 secondsStrip.setPixelColor(i, color);
-            } else {
-                // Variant 1: Use the WordClock's default color
+            }
+            uint32_t highlightColor = secondsStrip.ColorHSV((second * 65536 / 60) % 65536, 255, 255);
+            secondsStrip.setPixelColor(second, highlightColor);
+            break;
+        }
+
+        case 4: { // Expanding Ring
+            int expansionSize = map(timeInSecond, 0, 1000, 0, 5);
+            for (int i = -expansionSize; i <= expansionSize; i++) {
+                int ledIndex = (second + i + 60) % 60; // Handle wraparound
+                uint8_t factor = 255 - abs(i) * 50;    // Decrease brightness outward
+                uint8_t r = (redVal * factor) / 255;
+                uint8_t g = (greenVal * factor) / 255;
+                uint8_t b = (blueVal * factor) / 255;
+                secondsStrip.setPixelColor(ledIndex, r, g, b);
+            }
+            break;
+        }
+
+        case 5: // Clock Sweep
+            for (int i = 0; i <= second; i++) {
                 secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
             }
-        }
-
-        // Handle staggered turning off for the previous block
-        if (millis() - lastSecondMillis >= 1000) { // Reset every second
-            lastSecondMillis = millis();
-        }
-
-        // Turn off LEDs in the current block after 0.2 seconds
-        if (millis() - lastSecondMillis > 200) {
-            for (int i = startLED; i < startLED + 5; i++) {
-                secondsStrip.setPixelColor(i, 0, 0, 0); // Turn off LEDs in the block
-            }
-        }
+            break;
     }
 
-    secondsStrip.setBrightness(intensity); // Match brightness to day mode
-    secondsStrip.show(); // Apply updates to the strip
+    secondsStrip.setBrightness(intensity); // Match brightness
+    secondsStrip.show(); // Apply updates
 }
-
 // ###########################################################################################################################################
 // # Show the IP-address on the display:
 // ###########################################################################################################################################
