@@ -280,7 +280,7 @@ void loop() {
       // KM Start
       secondsStrip.setBrightness(intensity);
       ShowTheTime();
-      updateSecondsLED(iSecondLED); // Update seconds display with current variant
+      updateSecondsLED(iSecondLED, secondsDisplayVariant); // Update seconds display with current variant
       // KM End
     }
 
@@ -1707,8 +1707,8 @@ void rtcReadTime() {
 // # KM Function to update iSecondsLED
 // #############################################################################################################
 
-// KM Start: Update seconds LED strip with variants
-void updateSecondsLED(int second) {
+// KM Start: Complete updateSecondsLED function with dynamic variants and rotation
+void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.clear(); // Turn off all LEDs
 
     unsigned long currentMillis = millis();
@@ -1728,7 +1728,7 @@ void updateSecondsLED(int second) {
             break;
         }
 
-        case 2: { // Running Effect (Progressive Trail)
+        case 2: { // Running Point with Target
             for (int i = 0; i < 5; i++) {
                 int ledIndex = (second - i + 60) % 60; // Handle wraparound
                 uint8_t factor = 255 - (i * 50);       // Gradually decrease brightness
@@ -1763,16 +1763,48 @@ void updateSecondsLED(int second) {
             break;
         }
 
-        case 5: // Clock Sweep
-            for (int i = 0; i <= second; i++) {
-                secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
+        case 5: { // Chaser to Second
+            for (int i = 0; i < 60; i++) {
+                uint8_t r = (i == second) ? redVal : (redVal / 4);
+                uint8_t g = (i == second) ? greenVal : (greenVal / 4);
+                uint8_t b = (i == second) ? blueVal : (blueVal / 4);
+                secondsStrip.setPixelColor(i, r, g, b);
             }
+            break;
+        }
+
+        case 6: // Circular Motion
+            for (int i = 0; i < 60; i++) {
+                int offset = (second + i) % 60;
+                uint8_t brightness = (255 - (i * 15)) % 255;
+                uint8_t r = (redVal * brightness) / 255;
+                uint8_t g = (greenVal * brightness) / 255;
+                uint8_t b = (blueVal * brightness) / 255;
+                secondsStrip.setPixelColor(offset, r, g, b);
+            }
+            break;
+
+        case 7: // Pulse Effect
+            for (int i = 0; i < 60; i++) {
+                int brightness = (i == second) ? (128 + 127 * sin(PI * timeInSecond / 1000.0)) : 0;
+                uint8_t r = (redVal * brightness) / 255;
+                uint8_t g = (greenVal * brightness) / 255;
+                uint8_t b = (blueVal * brightness) / 255;
+                secondsStrip.setPixelColor(i, r, g, b);
+            }
+            break;
+
+        default: // Fallback: Default LED behavior
+            secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
             break;
     }
 
     secondsStrip.setBrightness(intensity); // Match brightness
     secondsStrip.show(); // Apply updates
 }
+
+// KM End
+
 // ###########################################################################################################################################
 // # Show the IP-address on the display:
 // ###########################################################################################################################################
@@ -2261,7 +2293,7 @@ void handleTime() {
     // KM Start
     // Update iSecondLED and seconds LEDs
     iSecondLED = sec;  // Use the current second for the seconds LEDs
-    updateSecondsLED(iSecondLED);  // Call the function to update the seconds LEDs
+    updateSecondsLED(iSecondLED, secondsDisplayVariant);  // Call the function to update the seconds LEDs
     // KM End
 
     if (timedebug == 1) {
