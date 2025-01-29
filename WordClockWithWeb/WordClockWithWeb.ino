@@ -231,7 +231,7 @@ void loop() {
 
     // KM Start: Rotate seconds display variant every 5 minutes
     if (millis() - lastVariantChange >= 120000) { // 120000 ms = 2 minutes
-      secondsDisplayVariant = (secondsDisplayVariant + 1) % 15; // Rotate through variants 0-5
+      secondsDisplayVariant = (secondsDisplayVariant + 1) % 11; // Rotate through variants 0-5
       lastVariantChange = millis();
       Serial.print("Seconds display variant changed to: ");
       Serial.println(secondsDisplayVariant);
@@ -1707,7 +1707,7 @@ void rtcReadTime() {
 // # KM Function to update iSecondsLED
 // #############################################################################################################
 
-// KM Start: Complete updateSecondsLED function with 21 unique single-color, multi-color, static, dynamic, and random effects
+// KM Start: Updated updateSecondsLED function ensuring the real second is always visible while keeping dynamic and colorful effects
 void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.clear(); // Turn off all LEDs
 
@@ -1724,36 +1724,39 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
             secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
             break;
 
-        case 1: { // Pulsating LED
+        case 1: { // Pulsating LED (second LED fades in and out)
             int brightness = (int)(128 + 127 * sin(PI * timeInSecond / 1000.0));
             secondsStrip.setPixelColor(second, (redVal * brightness) / 255, (greenVal * brightness) / 255, (blueVal * brightness) / 255);
             break;
         }
 
-        case 2: { // Moving Trail (Single Color)
+        case 2: { // Moving Trail (Single Color, trailing towards second)
             for (int i = 0; i < 5; i++) {
                 int ledIndex = (second - i + 60) % 60;
                 uint8_t factor = 255 - (i * 50);
                 secondsStrip.setPixelColor(ledIndex, (redVal * factor) / 255, (greenVal * factor) / 255, (blueVal * factor) / 255);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 3: { // Rotating Rainbow
+        case 3: { // Rotating Rainbow with Second Highlight
             for (int i = 0; i < 60; i++) {
                 uint32_t color = secondsStrip.ColorHSV((i * 65536 / 60 + millis() / 10) % 65536, 255, 255);
                 secondsStrip.setPixelColor(i, color);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 4: { // Expanding and Contracting Wave (Multi-Color)
+        case 4: { // Expanding and Contracting Wave with Second Glow
             int expansionSize = map(timeInSecond, 0, 1000, 0, 5);
             for (int i = -expansionSize; i <= expansionSize; i++) {
                 int ledIndex = (second + i + 60) % 60;
                 uint32_t color = secondsStrip.ColorHSV((second * 65536 / 60 + timeInSecond * 65) % 65536, 255, 255 - abs(i) * 50);
                 secondsStrip.setPixelColor(ledIndex, color);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
@@ -1764,71 +1767,48 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
             break;
         }
 
-        case 6: { // Sparkling Random LEDs (Multi-Color)
+        case 6: { // Sparkling Random LEDs with Second Highlight
             for (int i = 0; i < 5; i++) {
                 int randLED = random(0, 60);
                 secondsStrip.setPixelColor(randLED, random(0, 255), random(0, 255), random(0, 255));
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 7: { // Comet Tail with Color Shift
+        case 7: { // Comet Tail with Second Flash
             for (int i = 0; i < 5; i++) {
                 int ledIndex = (second - i + 60) % 60;
                 uint32_t color = secondsStrip.ColorHSV((second * 65536 / 60 + i * 1000) % 65536, 255, 255 - (i * 50));
                 secondsStrip.setPixelColor(ledIndex, color);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 8: { // Plasma Wave Effect
+        case 8: { // Plasma Wave with Second Overlay
             for (int i = 0; i < 60; i++) {
                 uint32_t color = secondsStrip.ColorHSV((i * 65536 / 60 + millis() / 5) % 65536, 255, (sin(i + millis() / 500.0) * 127 + 128));
                 secondsStrip.setPixelColor(i, color);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 9: { // Random Chaser
-            int chaserLED = (second + (millis() / 200) % 10) % 60;
-            uint32_t color = secondsStrip.ColorHSV((millis() / 3) % 65536, 255, 255);
-            secondsStrip.setPixelColor(chaserLED, color);
-            break;
-        }
-
-        case 10: { // Expanding Circle Effect
-            for (int i = 0; i < 5; i++) {
-                int ledIndex = (second + i) % 60;
-                secondsStrip.setPixelColor(ledIndex, redVal, greenVal, blueVal);
+        case 9: { // Running Colors to the Current Second with Flash
+            for (int i = 0; i < second; i++) {
+                uint32_t color = secondsStrip.ColorHSV((i * 65536 / 60 + millis() / 5) % 65536, 255, 255);
+                secondsStrip.setPixelColor(i, color);
             }
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
-        case 11: { // Strobe Effect (Flashing All LEDs)
-            if ((millis() / 250) % 2 == 0) {
-                secondsStrip.fill(secondsStrip.Color(255, 255, 255));
-            }
-            break;
-        }
-
-        case 12: { // Breathing LED Effect
-            int brightness = (int)(128 + 127 * sin(PI * millis() / 2000.0));
-            secondsStrip.fill(secondsStrip.Color((redVal * brightness) / 255, (greenVal * brightness) / 255, (blueVal * brightness) / 255));
-            break;
-        }
-
-        case 13: { // Alternating Blink
+        case 10: { // Alternating Dual Color Blink on Second
             if ((millis() / 500) % 2 == 0) {
-                secondsStrip.fill(secondsStrip.Color(255, 255, 255));
-            }
-            break;
-        }
-
-        case 14: { // Spiral Effect
-            for (int i = 0; i < 10; i++) {
-                int pos = (second + i * 6) % 60;
-                uint32_t color = secondsStrip.ColorHSV((i * 65536 / 10) % 65536, 255, 255);
-                secondsStrip.setPixelColor(pos, color);
+                secondsStrip.setPixelColor(second, 255, 0, 0);
+            } else {
+                secondsStrip.setPixelColor(second, 0, 0, 255);
             }
             break;
         }
@@ -1842,6 +1822,7 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.show();
 }
 // KM End
+
 
 
 // ###########################################################################################################################################
