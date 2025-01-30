@@ -70,7 +70,7 @@ int powersupply = 0;      // Flag for the power supply note text and to raise th
 int useRTC = 1;           // Flag to disable the RTC board (No configuration needed. Set automatically after entering and saving the web config once)
 int DEspecial1 = 0;       // DE special function only: Change between "VIERTEL VOR" = "0" and "DREIVIERTEL" = "1"
 // KM Start: Variable for seconds display variant
-int secondsDisplayVariant = 2; // 0: Default, 1: Staggered variant
+int secondsDisplayVariant = 8; // 0: Default, 1: Staggered variant
 // KM End
 
 // ###########################################################################################################################################
