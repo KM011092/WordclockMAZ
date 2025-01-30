@@ -235,14 +235,14 @@ void loop() {
     if (currentMillis - lastMillis >= 1000) {  // Ensure one update per second
       lastMillis = currentMillis;
       updateSecondsLED(iSecond, secondsDisplayVariant);
-      Serial.print("Updated second: ");
-      Serial.println(iSecond);
+      // Serial.print("Updated second: ");
+      // Serial.println(iSecond);
     }
     // KM End
 
     // KM Start: Rotate seconds display variant every 1 minute
-    if (millis() - lastVariantChange >= 60000) {
-      secondsDisplayVariant = (secondsDisplayVariant + 1) % 9; // Rotate through variants dynamically
+    if (millis() - lastVariantChange >= 300000) {
+      secondsDisplayVariant = (secondsDisplayVariant + 1) % 10; // Rotate through variants dynamically
       lastVariantChange = millis();
       Serial.print("Seconds display variant changed to: ");
       Serial.println(secondsDisplayVariant);
@@ -1696,7 +1696,7 @@ void rtcReadTime() {
 // # KM Function to update iSecondsLED
 // #############################################################################################################
 
-// KM Start: Updated updateSecondsLED function ensuring the real second is always visible while keeping dynamic and colorful effects
+// KM Start: Updated updateSecondsLED function ensuring smooth transitions from second 60 to 1
 void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.clear(); // Turn off all LEDs
 
@@ -1714,138 +1714,189 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
             break;
 
         case 1: { // RainbowSeconds - Only the Current Second is Lit
-            secondsStrip.clear(); // Turn off all LEDs
-
-            // Get the assigned color for the current second
             uint32_t color = secondsStrip.ColorHSV(((second * 65536 / 60)) % 65536, 255, 255);
-
-            // Light up only the current second LED
             secondsStrip.setPixelColor(second, color);
             break;
         }
-        case 2: { // Single Color Fill-Up Effect with Fading Reset
-            if (second == 0) { 
-                // Gradual fade-out over the first 200ms of second 0
-                for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
-                    for (int i = 0; i < 60; i++) {
-                        secondsStrip.setPixelColor(i, (redVal * fadeLevel) / 255, (greenVal * fadeLevel) / 255, (blueVal * fadeLevel) / 255);
-                    }
-                    secondsStrip.show();
-                    delay(20); // Adjust speed of fade-out
-                }
-                secondsStrip.clear();
-            } else {
-                // Turn on LEDs progressively
-                for (int i = 0; i < second; i++) {
-                    secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
-                }
+
+case 2: { // Single Color Fill-Up Effect with Fading Reset
+    static bool isFading = false; // Track if fade-out is running
+
+    if (second == 0 && !isFading) { 
+        isFading = true; // Start fade-out process
+        
+        // Smooth fade-out from second 60 to 0
+        for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
+            for (int i = 0; i < 60; i++) {
+                secondsStrip.setPixelColor(i, (redVal * fadeLevel) / 255, 
+                                              (greenVal * fadeLevel) / 255, 
+                                              (blueVal * fadeLevel) / 255);
             }
-            break;
+            secondsStrip.show();
+            delay(15); // Adjusted speed for a smoother effect
         }
-        case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
-            if (second == 0) { 
-                // Gradual fade-out over the first 200ms of second 0
-                for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
-                    for (int i = 0; i < 60; i++) {
-                        uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, fadeLevel);
-                        secondsStrip.setPixelColor(i, color);
-                    }
-                    secondsStrip.show();
-                    delay(20); // Adjust speed of fade-out
-                }
-                secondsStrip.clear();
-            } else {
-                // Turn on LEDs progressively with RainbowSeconds colors
-                for (int i = 0; i < second; i++) {
-                    uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
-                    secondsStrip.setPixelColor(i, color);
-                }
+        
+        secondsStrip.clear();
+    } 
+    
+    if (second > 0) { 
+        isFading = false; // Reset flag after fade-out completes
+        
+        // Turn on LEDs progressively
+        for (int i = 0; i < second; i++) {
+            secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
+        }
+    }
+    break;
+}
+
+case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
+    static bool isFading = false; // Track fade-out process
+
+    if (second == 0 && !isFading) { 
+        isFading = true; // Start fade-out
+        
+        // Gradual fade-out over 200ms
+        for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
+            for (int i = 0; i < 60; i++) {
+                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, fadeLevel);
+                secondsStrip.setPixelColor(i, color);
             }
-            break;
+            secondsStrip.show();
+            delay(15); // Smooth transition
         }
+
+        secondsStrip.clear();
+    } 
+    
+    if (second > 0) { 
+        isFading = false; // Reset fade-out flag
+        
+        // Turn on LEDs progressively with RainbowSeconds colors
+        for (int i = 0; i < second; i++) {
+            uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
+            secondsStrip.setPixelColor(i, color);
+        }
+    }
+    break;
+}
+
 
         case 4: { // White Second with Smooth Single-Color Fading Trail
             for (int i = 0; i < 10; i++) {
                 int ledIndex = (second - i + 60) % 60; // Ensure wraparound
-                
-                // Exponential brightness decay for smoother fading
-                uint8_t brightnessFactor = 255 * pow(0.7, i); // Smoother fade-out
-
-                secondsStrip.setPixelColor(ledIndex, 
-                    (redVal * brightnessFactor) / 255, 
-                    (greenVal * brightnessFactor) / 255, 
-                    (blueVal * brightnessFactor) / 255);
+                uint8_t brightnessFactor = 255 * pow(0.7, i);
+                secondsStrip.setPixelColor(ledIndex, (redVal * brightnessFactor) / 255, 
+                                                      (greenVal * brightnessFactor) / 255, 
+                                                      (blueVal * brightnessFactor) / 255);
             }
-
-            // White LED for the current second
             secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
 
         case 5: { // White Second with Smooth RainbowSeconds Fading Trail
             for (int i = 0; i < 10; i++) {
-                int ledIndex = (second - i + 60) % 60; // Ensure wraparound
-                
-                // Exponential brightness decay for smoother fading
-                uint8_t brightnessFactor = 255 * pow(0.7, i); // Smoother fade-out
-                
-                uint32_t color = secondsStrip.ColorHSV(
-                    ((ledIndex * 65536 / 60)) % 65536, 
-                    255, 
-                    brightnessFactor
-                );
+                int ledIndex = (second - i + 60) % 60;
+                uint8_t brightnessFactor = 255 * pow(0.7, i);
+                uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, brightnessFactor);
                 secondsStrip.setPixelColor(ledIndex, color);
             }
-
-            // White LED for the current second
             secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
-        case 6: { // Single Color Marching Blocks with Fading Reset
-            int blockStart = (second / 5) * 5; // Determine which block we are in
-            int currentLed = second % 5; // Determine which LED in the block should turn on
 
-            // Turn on LEDs progressively in the current 5-second block
+        case 6: { // Single Color Marching Blocks with Fading Reset
+            int blockStart = (second / 5) * 5;
+            int currentLed = second % 5;
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 secondsStrip.setPixelColor(ledIndex, redVal, greenVal, blueVal);
             }
-
-            // At the 6th second of each block, fade out the previous 5 LEDs after 0.2s
             if (currentLed == 0 && second != 0 && timeInSecond > 200) { 
-                int previousBlockStart = (blockStart - 5 + 60) % 60; // Find the previous block
+                int previousBlockStart = (blockStart - 5 + 60) % 60;
                 for (int i = 0; i < 5; i++) {
                     int prevLedIndex = (previousBlockStart + i) % 60;
-                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0); // Smooth fading effect
-                    secondsStrip.setPixelColor(prevLedIndex, (redVal * fadeFactor) / 255, (greenVal * fadeFactor) / 255, (blueVal * fadeFactor) / 255);
+                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0);
+                    secondsStrip.setPixelColor(prevLedIndex, (redVal * fadeFactor) / 255, 
+                                                              (greenVal * fadeFactor) / 255, 
+                                                              (blueVal * fadeFactor) / 255);
                 }
             }
             break;
         }
-        case 7: { // RainbowSeconds Marching Blocks with Fading Reset
-            int blockStart = (second / 5) * 5; // Determine which block we are in
-            int currentLed = second % 5; // Determine which LED in the block should turn on
 
-            // Turn on LEDs progressively in the current 5-second block with their RainbowSeconds color
+        case 7: { // RainbowSeconds Marching Blocks with Fading Reset
+            int blockStart = (second / 5) * 5;
+            int currentLed = second % 5;
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, 255);
                 secondsStrip.setPixelColor(ledIndex, color);
             }
-
-            // At the 6th second of each block, fade out the previous 5 LEDs after 0.2s
             if (currentLed == 0 && second != 0 && timeInSecond > 200) { 
-                int previousBlockStart = (blockStart - 5 + 60) % 60; // Find the previous block
+                int previousBlockStart = (blockStart - 5 + 60) % 60;
                 for (int i = 0; i < 5; i++) {
                     int prevLedIndex = (previousBlockStart + i) % 60;
-                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0); // Smooth fading effect
+                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0);
                     uint32_t fadedColor = secondsStrip.ColorHSV(((prevLedIndex * 65536 / 60)) % 65536, 255, fadeFactor);
                     secondsStrip.setPixelColor(prevLedIndex, fadedColor);
                 }
             }
             break;
         }
+        case 8: { // Full-Spectrum Rotating RainbowSeconds Effect (2 Seconds per Rotation with White Second Indicator)
+            unsigned long cycleTime = 2000; // Complete cycle in 2 seconds
+            uint16_t hueShift = (millis() % cycleTime) * 65536 / cycleTime; // Calculate shifting hue dynamically
 
+            for (int i = 0; i < 60; i++) {
+                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60) + hueShift) % 65536, 255, 255);
+                secondsStrip.setPixelColor(i, color);
+            }
+
+            // Highlight the real second in white
+            secondsStrip.setPixelColor(second, 255, 255, 255);
+            break;
+        }
+        
+        
+        case 9: { // Moving Rainbow Wave Pushing the Current Second (Extended Travel)
+            static int waveStart = -20;  // Start wave 20 LEDs before the second
+            static int lastSecond = -1;
+            static int waveSpeed = 2; // Increase speed (LEDs per update)
+
+            // Reset wave position when a new second starts
+            if (second != lastSecond) {
+                lastSecond = second;
+                waveStart = second - 20; // Place the wave further away from the second
+            }
+
+            secondsStrip.clear(); // Turn off all LEDs
+
+            // Move the 8-LED wave toward the current second
+            bool waveCompleted = false;
+            for (int i = 0; i < 8; i++) {
+                int ledIndex = (waveStart + i + 60) % 60; 
+
+                if (ledIndex == second) {
+                    waveCompleted = true; // Stop the wave when it reaches the second
+                    break;
+                }
+
+                uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, 255);
+                secondsStrip.setPixelColor(ledIndex, color);
+            }
+
+            // Light up the current second in white
+            secondsStrip.setPixelColor(second, 255, 255, 255);
+
+            // Move the wave faster, so it covers more distance
+            if (!waveCompleted) {
+                waveStart += waveSpeed;  // Move faster to reach the second
+            }
+
+            secondsStrip.show();
+            break;
+        }
 
 
 
@@ -1858,6 +1909,7 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.show();
 }
 // KM End
+
 
 
 
