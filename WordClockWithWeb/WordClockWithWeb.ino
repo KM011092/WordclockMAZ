@@ -215,7 +215,35 @@ void setup() {
   Serial.println("http://" + WiFi.localIP().toString());
   Serial.println("######################################################################");
 }
+// KM Rotation Mode
+void showRotationMode(int mode) {
+    pixels.clear();  // Clear the display
 
+    int ledIndex = -1;  // Default (no LED)
+
+    if (mode == 1) {
+        ledIndex = LED_MODE_1;  // Rotation OFF
+    } else if (mode == 2) {
+        ledIndex = LED_MODE_2;  // 1-minute rotation
+    } else if (mode == 3) {
+        ledIndex = LED_MODE_3;  // 2-minute rotation
+    } else if (mode == 4) {
+        ledIndex = LED_MODE_4;  // 5-minute rotation
+    } else if (mode == 5) {
+        ledIndex = LED_MODE_5;  // 10-minute rotation
+    }
+
+    if (ledIndex != -1) {
+        pixels.setPixelColor(ledIndex, 255, 255, 255); // LED lights up white
+        pixels.show();
+        delay(2000);  // Show LED for 2 seconds
+        pixels.clear();
+        ShowTheTime();  // Restore normal time display
+    }
+}
+
+
+// KM End
 
 // ###########################################################################################################################################
 // # Loop function which runs all the time after the startup was done:
@@ -249,24 +277,30 @@ void loop() {
     static int rotationTimes[] = {60000, 120000, 300000, 600000}; // 1, 2, 5, 10 Minuten
     static int rotationIndex = 0; // Startwert für die Rotation-Zeit
 
-    if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
+        if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
         lastSwitchPress = currentMillis;
 
-        if (!autoRotate) {
-            autoRotate = true;
-            Serial.println("Automatische Rotation AKTIVIERT");
+        rotationIndex = (rotationIndex + 1) % 5; // 5 options (0-4)
+        
+        Serial.print("Rotation mode changed to: ");
+        
+        int modeNumber;
+        if (rotationIndex == 0) {  // Rotation OFF
+            Serial.println("OFF");
+            autoRotate = false;
+            modeNumber = 1;  // Show LED 1 when rotation is OFF
         } else {
-            rotationIndex = (rotationIndex + 1) % 4; // Wechselt zwischen 1, 2, 5, 10 Minuten
-            Serial.print("Rotationzeit geändert auf: ");
-            Serial.print(rotationTimes[rotationIndex] / 60000);
-            Serial.println(" Minuten");
-
-            if (rotationIndex == 0) {
-                autoRotate = false; // Wenn Index auf 0 zurückgesetzt wird, Rotation stoppen
-                Serial.println("Automatische Rotation DEAKTIVIERT");
-            }
+            autoRotate = true;
+            Serial.print(rotationTimes[rotationIndex - 1] / 60000);
+            Serial.println(" minutes");
+            modeNumber = rotationIndex + 1; // Shift numbering (LED 2–5)
         }
+
+        // KM Start: Display corresponding LED for rotation setting
+        showRotationMode(modeNumber);
+        // KM End
     }
+
     // KM End
 
     // KM Start: Automatische Rotation (wenn aktiviert)
