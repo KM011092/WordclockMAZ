@@ -84,9 +84,7 @@ bool RESTmanLEDsON = true;                                                      
 bool UpdateAvailable = false;                                                        // Global flag to check for avaiable updates
 String AvailableVersion = "-";                                                       // Global string to check for avaiable updates
 bool NightModeActive = false;                                                        // Global flag to track if Night Mode is currently active - used for PING function
-// KM Start: Global variable for variant rotation
-unsigned long lastVariantChange = 0; // Tracks the last time the variant was changed
-// KM End
+
 
 // ###########################################################################################################################################
 // # Parameter record to store to the EEPROM of the ESP:
@@ -157,6 +155,7 @@ void setup() {
    // KM Start: Switch-Pins als Input mit Pullup setzen
     pinMode(SWITCH_1, INPUT_PULLUP);
     pinMode(SWITCH_2, INPUT_PULLUP);
+    Serial.println("Sekundenanzeige-Steuerung mit Switchen aktiv!");
     // KM End
 
   delay(500);
@@ -222,98 +221,114 @@ void setup() {
 // # Loop function which runs all the time after the startup was done:
 // ###########################################################################################################################################
 void loop() {
-  ESP.wdtFeed();  // Reset watchdog timer
-// KM Start: Switch-Status prüfen
-  if (digitalRead(SWITCH_1) == LOW) {
-    Serial.println("Switch 1 gedrückt!");
-       // Hier kannst du später eine Aktion ausführen
-    }
-
-  if (digitalRead(SWITCH_2) == LOW) {
-       Serial.println("Switch 2 gedrückt!");
-      // Hier kannst du später eine Aktion ausführen
-  }
-  delay(100);  // Kurze Pause zur Entprellung
-  // KM End
-
-    
-  // Check WiFi connection and reconnect if needed:
-  if (WiFi.status() != WL_CONNECTED) {
-    WIFI_login();  // WiFi inactive --> Reconnect to it...
-  } else {         // Wifi active --> Sort some atoms in the universe and show the time...
-    // Check, whether something has been entered on Config Page
-    checkClient();
-    ESP.wdtFeed();  // Reset watchdog timer
-    handleTime();   // handle NTP / RTC time
-
-    // KM Start: Optimized non-blocking timing approach
-    static unsigned long lastMillis = 0;
+    ESP.wdtFeed();  // Watchdog Timer zurücksetzen
     unsigned long currentMillis = millis();
-    
-    if (currentMillis - lastMillis >= 1000) {  // Ensure one update per second
-      lastMillis = currentMillis;
-      updateSecondsLED(iSecond, secondsDisplayVariant);
-      // Serial.print("Updated second: ");
-      // Serial.println(iSecond);
+
+    // KM Start: Switch 1 - Schaltet durch ALLE Varianten (0–9)
+    if (!digitalRead(SWITCH_1) && currentMillis - lastSwitchPress > debounceDelay) {
+        lastSwitchPress = currentMillis;
+
+        if (variantIndex < 9) {
+            variantIndex++;
+        } else {
+            variantIndex = 0; // Zurück zur ersten Variante
+        }
+
+        secondsDisplayVariant = secondsVariants[variantIndex];
+        autoRotate = false; // Falls aktiv, wird die Rotation deaktiviert
+
+        Serial.print("Variante gewechselt zu: ");
+        Serial.println(secondsDisplayVariant);
+
+        updateSecondsLED(iSecond, secondsDisplayVariant);
+        pixels.show();
     }
     // KM End
 
-    // KM Start: Rotate seconds display variant every 1 minute
-    if (millis() - lastVariantChange >= 300000) {
-      secondsDisplayVariant = (secondsDisplayVariant + 1) % 10; // Rotate through variants dynamically
-      lastVariantChange = millis();
-      Serial.print("Seconds display variant changed to: ");
-      Serial.println(secondsDisplayVariant);
+    // KM Start: Switch 2 - Schaltet zwischen Rotation AN/AUS und ändert Rotationszeit
+    static int rotationTimes[] = {60000, 120000, 300000, 600000}; // 1, 2, 5, 10 Minuten
+    static int rotationIndex = 0; // Startwert für die Rotation-Zeit
+
+    if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
+        lastSwitchPress = currentMillis;
+
+        if (!autoRotate) {
+            autoRotate = true;
+            Serial.println("Automatische Rotation AKTIVIERT");
+        } else {
+            rotationIndex = (rotationIndex + 1) % 4; // Wechselt zwischen 1, 2, 5, 10 Minuten
+            Serial.print("Rotationzeit geändert auf: ");
+            Serial.print(rotationTimes[rotationIndex] / 60000);
+            Serial.println(" Minuten");
+
+            if (rotationIndex == 0) {
+                autoRotate = false; // Wenn Index auf 0 zurückgesetzt wird, Rotation stoppen
+                Serial.println("Automatische Rotation DEAKTIVIERT");
+            }
+        }
     }
     // KM End
 
-    if (switchRainBow == 2) {  // RainBow variant 2 effect active - color change every new minute
-      if (iSecond == 0) {
-        redVal = random(255);
-        greenVal = random(255);
-        blueVal = random(255);
-      }
-    }
+    // KM Start: Automatische Rotation (wenn aktiviert)
+    static unsigned long lastVariantChange = 0;
+    if (autoRotate && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
+        lastVariantChange += rotationTimes[rotationIndex];
+        variantIndex = (variantIndex + 1) % 10; // Schaltet durch alle Varianten (0-9)
 
-    // Show the display only during the set Min/Max time if option is set
-    if (displayoff) {
-      switch (iWeekDay) {
-        case 0:  DayNightMode(displayonminSU, displayonmaxSU); break;
-        case 1:  DayNightMode(displayonminMO, displayonmaxMO); break;
-        case 2:  DayNightMode(displayonminTU, displayonmaxTU); break;
-        case 3:  DayNightMode(displayonminWE, displayonmaxWE); break;
-        case 4:  DayNightMode(displayonminTH, displayonmaxTH); break;
-        case 5:  DayNightMode(displayonminFR, displayonmaxFR); break;
-        case 6:  DayNightMode(displayonminSA, displayonmaxSA); break;
-      }
+        secondsDisplayVariant = secondsVariants[variantIndex];
+
+        Serial.print("Automatische Rotation: Variante ");
+        Serial.println(secondsDisplayVariant);
+
+        updateSecondsLED(iSecond, secondsDisplayVariant);
+        pixels.show();
+    }
+    // KM End
+
+    // KM Start: Präzise Sekundenaktualisierung
+    static unsigned long lastSecondUpdate = 0;
+    if (millis() - lastSecondUpdate >= 1000) { // Alle 1 Sekunde
+        lastSecondUpdate += 1000;
+        updateSecondsLED(iSecond, secondsDisplayVariant);
+    }
+    // KM End
+
+    // Standard Code für WLAN, Webserver, etc.
+    if (WiFi.status() != WL_CONNECTED) {
+        WIFI_login();
     } else {
-      pixels.setBrightness(intensity);  // DAY brightness
-      secondsStrip.setBrightness(intensity);
-      ShowTheTime();
-      updateSecondsLED(iSecondLED, secondsDisplayVariant);
+        checkClient();
+        ESP.wdtFeed();
+        handleTime();
+
+        if (displayoff) {
+            switch (iWeekDay) {
+                case 0: DayNightMode(displayonminSU, displayonmaxSU); break;
+                case 1: DayNightMode(displayonminMO, displayonmaxMO); break;
+                case 2: DayNightMode(displayonminTU, displayonmaxTU); break;
+                case 3: DayNightMode(displayonminWE, displayonmaxWE); break;
+                case 4: DayNightMode(displayonminTH, displayonmaxTH); break;
+                case 5: DayNightMode(displayonminFR, displayonmaxFR); break;
+                case 6: DayNightMode(displayonminSA, displayonmaxSA); break;
+            }
+        } else {
+            pixels.setBrightness(intensity);
+            secondsStrip.setBrightness(intensity);
+            ShowTheTime();
+            updateSecondsLED(iSecondLED, secondsDisplayVariant);
+        }
+
+        ESP.wdtFeed();
+        httpServer.handleClient();
+        MDNS.update();
+        if (PING_USEMONITOR == 1) PingIP();
+        if (LEDsON && RESTmanLEDsON) pixels.show();
     }
 
-    ESP.wdtFeed();  // Reset watchdog timer
-
-    // Web update start:
-    httpServer.handleClient();
-    MDNS.update();
-
-    // PING function:
-    if (PING_USEMONITOR == 1) PingIP();
-
-    if (LEDsON == true && RESTmanLEDsON == true) pixels.show();  // Send updated pixel colors to hardware.
-  }
-
-  // REST function web server:
-  if (useresturl) server1->handleClient();
-
-  // Reset update information every new hour for fresh configuration page reload
-  if ((useupdate == 2) && (iMinute == 0) && (iSecond == 0)) {
-    UpdateAvailable = false;
-    AvailableVersion = "-";
-  }
+    if (useresturl) server1->handleClient();
 }
+
+
 
 
 
@@ -1823,42 +1838,41 @@ case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
             break;
         }
 
-        case 6: { // Single Color Marching Blocks with Fading Reset
+        case 6: { // **Single Color Progressive Fill-up in Blocks of 5**
+            static int lastBlockStart = -1;
             int blockStart = (second / 5) * 5;
-            int currentLed = second % 5;
+            int currentLed = second % 5; // Position within the block
+
+            // If entering a new block (S6, S11, S16, etc.), turn off the previous one
+            if (blockStart != lastBlockStart) {
+                secondsStrip.clear();
+                lastBlockStart = blockStart;
+            }
+
+            // Light up progressively within the 5-LED block
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 secondsStrip.setPixelColor(ledIndex, redVal, greenVal, blueVal);
             }
-            if (currentLed == 0 && second != 0 && timeInSecond > 200) { 
-                int previousBlockStart = (blockStart - 5 + 60) % 60;
-                for (int i = 0; i < 5; i++) {
-                    int prevLedIndex = (previousBlockStart + i) % 60;
-                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0);
-                    secondsStrip.setPixelColor(prevLedIndex, (redVal * fadeFactor) / 255, 
-                                                              (greenVal * fadeFactor) / 255, 
-                                                              (blueVal * fadeFactor) / 255);
-                }
-            }
             break;
         }
 
-        case 7: { // RainbowSeconds Marching Blocks with Fading Reset
+        case 7: { // **Rainbow Progressive Fill-up in Blocks of 5**
+            static int lastBlockStart = -1;
             int blockStart = (second / 5) * 5;
-            int currentLed = second % 5;
+            int currentLed = second % 5; // Position within the block
+
+            // If entering a new block (S6, S11, S16, etc.), turn off the previous one
+            if (blockStart != lastBlockStart) {
+                secondsStrip.clear();
+                lastBlockStart = blockStart;
+            }
+
+            // Light up progressively within the 5-LED block in rainbow colors
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, 255);
                 secondsStrip.setPixelColor(ledIndex, color);
-            }
-            if (currentLed == 0 && second != 0 && timeInSecond > 200) { 
-                int previousBlockStart = (blockStart - 5 + 60) % 60;
-                for (int i = 0; i < 5; i++) {
-                    int prevLedIndex = (previousBlockStart + i) % 60;
-                    uint8_t fadeFactor = map(timeInSecond, 200, 1000, 255, 0);
-                    uint32_t fadedColor = secondsStrip.ColorHSV(((prevLedIndex * 65536 / 60)) % 65536, 255, fadeFactor);
-                    secondsStrip.setPixelColor(prevLedIndex, fadedColor);
-                }
             }
             break;
         }
@@ -2344,6 +2358,7 @@ void showCurrentTime() {
       }
   }
 }
+// KM Show Rotation Setting
 
 
 // ###########################################################################################################################################

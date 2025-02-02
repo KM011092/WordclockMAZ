@@ -40,7 +40,24 @@ Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ
 // KM Start: Switch-Pins definieren
 #define SWITCH_1 D5  // GPIO14
 #define SWITCH_2 D2  // GPIO4
+// Kategorien für die Sekundenanzeige + Automatische Rotation
+enum SecondsCategory {
+    SINGLE_COLOR,   // Einfarbig (redVal, greenVal, blueVal)
+    RAINBOW_FIXED,  // Regenbogen-Fest (jede LED feste Regenbogenfarbe)
+    RAINBOW_DYNAMIC,// Dynamischer Regenbogen (Farben ändern sich)
+    AUTO_ROTATE     // Automatische Rotation der Varianten
+};
 
+SecondsCategory currentCategory = SINGLE_COLOR;  // Standard-Kategorie
+int secondsVariants[] = {0, 2, 4, 6,   // Einfarbige Varianten
+                         1, 3, 5, 7,   // Regenbogen-Fest Varianten
+                         8, 9};        // Dynamischer Regenbogen
+
+int variantIndex = 0;  // Index in der Liste der Varianten
+unsigned long lastSwitchPress = 0; // Entprellung der Switche
+const int debounceDelay = 200; // 200ms Entprellzeit
+unsigned long lastVariantChange = 0; // Timer für die Rotation
+bool autoRotate = false;  // Automatische Rotation standardmäßig deaktiviert
 
 // KM End
 
