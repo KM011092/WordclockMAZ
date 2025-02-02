@@ -37,6 +37,11 @@ int RTC_I2C_ADDRESS = 0x68;  // I2C adress of the RTC  DS3231 (Chip on ZS-042 Bo
 #define SECONDS_PIN D7           // Pin for the seconds LED strip
 #define SECONDS_NUMPIXELS 60     // Number of LEDs in the seconds strip
 Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ800);
+// KM Start: Switch-Pins definieren
+#define SWITCH_1 D5  // GPIO14
+#define SWITCH_2 D2  // GPIO4
+
+
 // KM End
 
 // ###########################################################################################################################################

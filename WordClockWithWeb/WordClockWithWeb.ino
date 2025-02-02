@@ -154,6 +154,11 @@ struct parmRec {
 // ###########################################################################################################################################
 void setup() {
   Serial.begin(115200);
+   // KM Start: Switch-Pins als Input mit Pullup setzen
+    pinMode(SWITCH_1, INPUT_PULLUP);
+    pinMode(SWITCH_2, INPUT_PULLUP);
+    // KM End
+
   delay(500);
   Serial.println("######################################################################");
   Serial.print("# WordClock startup of version: ");
@@ -218,7 +223,20 @@ void setup() {
 // ###########################################################################################################################################
 void loop() {
   ESP.wdtFeed();  // Reset watchdog timer
+// KM Start: Switch-Status prüfen
+  if (digitalRead(SWITCH_1) == LOW) {
+    Serial.println("Switch 1 gedrückt!");
+       // Hier kannst du später eine Aktion ausführen
+    }
 
+  if (digitalRead(SWITCH_2) == LOW) {
+       Serial.println("Switch 2 gedrückt!");
+      // Hier kannst du später eine Aktion ausführen
+  }
+  delay(100);  // Kurze Pause zur Entprellung
+  // KM End
+
+    
   // Check WiFi connection and reconnect if needed:
   if (WiFi.status() != WL_CONNECTED) {
     WIFI_login();  // WiFi inactive --> Reconnect to it...
