@@ -2267,26 +2267,44 @@ void showMinutes(int minutes) {
 // # Show current date on clock with moving digits:
 // ###########################################################################################################################################
 void showCurrentDate() {
-  for (int x = 11; x > -50; x--) {
-    dunkel();
-    printAt(iDay / 10, x, 2);
-    printAt(iDay % 10, x + 6, 2);
-    setLED(ledXY(x + 11, 2), ledXY(x + 11, 2), -1);  //sets first point
-    printAt(iMonth / 10, x + 13, 2);
-    printAt(iMonth % 10, x + 19, 2);
-    if (iYear < 1000)
-      iYear = iYear + 2000;
-    setLED(ledXY(x + 24, 2), ledXY(x + 24, 2), -1);  //sets second point
-    printAt(iYear / 1000, x + 26, 2);
-    iYear = iYear % 1000;
-    printAt(iYear / 100, x + 32, 2);
-    iYear = iYear % 100;
-    printAt(iYear / 10, x + 38, 2);
-    printAt(iYear % 10, x + 44, 2);
-    pixels.show();
-    delay(150);  // set speed of timeshift
-  }
+    Serial.println("📅 Showing Date - Turning Off Seconds Display");
+
+    // KM Start: Turn off seconds display while showing date
+    secondsStrip.clear();
+    secondsStrip.show();
+    bool secondsWereActive = autoRotate;  // Store previous seconds state
+    autoRotate = false;  // Temporarily disable seconds animation
+    // KM End
+
+    for (int x = 11; x > -50; x--) {
+        dunkel();
+        printAt(iDay / 10, x, 2);
+        printAt(iDay % 10, x + 6, 2);
+        setLED(ledXY(x + 11, 2), ledXY(x + 11, 2), -1);
+        printAt(iMonth / 10, x + 13, 2);
+        printAt(iMonth % 10, x + 19, 2);
+        if (iYear < 1000)
+            iYear = iYear + 2000;
+        setLED(ledXY(x + 24, 2), ledXY(x + 24, 2), -1);
+        printAt(iYear / 1000, x + 26, 2);
+        iYear = iYear % 1000;
+        printAt(iYear / 100, x + 32, 2);
+        iYear = iYear % 100;
+        printAt(iYear / 10, x + 38, 2);
+        printAt(iYear % 10, x + 44, 2);
+        pixels.show();
+        delay(150);
+    }
+
+    Serial.println("✅ Date Display Finished - Reactivating Seconds Display");
+
+    // KM Start: Restore seconds display after date disappears
+    autoRotate = secondsWereActive;  // Restore previous seconds state
+    updateSecondsLED(iSecond, secondsDisplayVariant);
+    secondsStrip.show();
+    // KM End
 }
+
 
 
 // ###########################################################################################################################################
