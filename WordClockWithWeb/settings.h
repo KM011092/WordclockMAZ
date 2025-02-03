@@ -38,8 +38,8 @@ int RTC_I2C_ADDRESS = 0x68;  // I2C adress of the RTC  DS3231 (Chip on ZS-042 Bo
 #define SECONDS_NUMPIXELS 60     // Number of LEDs in the seconds strip
 Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ800);
 // KM Start: Switch-Pins definieren
-#define SWITCH_1 D5  // GPIO14
-#define SWITCH_2 D2  // GPIO4
+#define SWITCH_1 D2  // GPIO14
+#define SWITCH_2 D5  // GPIO4
 #define LED_MODE_1  10  // LED for "Rotation OFF"
 #define LED_MODE_2  9  // LED for "1-minute rotation"
 #define LED_MODE_3  8  // LED for "2-minute rotation"
@@ -97,7 +97,7 @@ int powersupply = 0;      // Flag for the power supply note text and to raise th
 int useRTC = 1;           // Flag to disable the RTC board (No configuration needed. Set automatically after entering and saving the web config once)
 int DEspecial1 = 0;       // DE special function only: Change between "VIERTEL VOR" = "0" and "DREIVIERTEL" = "1"
 // KM Start: Variable for seconds display variant
-int secondsDisplayVariant = 9; // 0: Default, 1: Staggered variant
+int secondsDisplayVariant = 0; // 0: Default, 1: Staggered variant
 // KM End
 
 // ###########################################################################################################################################

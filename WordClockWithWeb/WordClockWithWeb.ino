@@ -39,6 +39,11 @@
 #include <ESP8266WebServer.h>         // Used for the internal webserver
 #include <WiFiManager.h>              // Used for the WiFi Manager option to be able to connect the WordClock to your WiFi without code changes
 #include <EEPROM.h>                   // Used to store the in the internal configuration page set configuration on the ESP internal storage
+// KM Start: EEPROM Addresses for Seconds Display Settings
+#define EEPROM_SECONDS_START 300   // Choose an address range not conflicting with `parmRec`
+#define EEPROM_SECONDS_SIZE  10    // Reserve 10 bytes for future expansion
+#define EEPROM_FLAG 123            // Magic flag to verify stored values
+// KM End
 #include <Adafruit_NeoPixel.h>        // Used to drive the NeoPixel LEDs
 #include <time.h>                     // Used to get the time from the internet
 #include <Wire.h>                     // Used to connect the RTC board
@@ -163,15 +168,19 @@ void setup() {
   Serial.print("# WordClock startup of version: ");
   Serial.println(WORD_CLOCK_VERSION);
   Serial.println("######################################################################");
-  // KM Start: Initialize the seconds LED strip
-  secondsStrip.begin();
-  secondsStrip.setBrightness(intensity); // Match day brightness initially
-  secondsStrip.show(); // Clear the LEDs on the seconds strip
-  // KM End 
+  
   
   dunkel();                         // Switch display black
   pixels.begin();                   // Init the NeoPixel library
   readEEPROM();                     // get persistent data from EEPROM
+  // KM Start: Load Seconds Settings Separately
+  loadSecondsSettings();
+  secondsStrip.begin();
+  secondsStrip.setBrightness(intensity); // Match day brightness initially
+  secondsStrip.show(); // Clear the LEDs on the seconds strip
+
+
+  // KM End
   pixels.setBrightness(intensity);  // Set LED brightness
   // KM Start
   secondsStrip.setBrightness(intensity);
@@ -253,78 +262,74 @@ void loop() {
     unsigned long currentMillis = millis();
 
     // KM Start: Switch 1 - Schaltet durch ALLE Varianten (0–9)
-    if (!digitalRead(SWITCH_1) && currentMillis - lastSwitchPress > debounceDelay) {
-        lastSwitchPress = currentMillis;
+    if (!digitalRead(SWITCH_1) && millis() - lastSwitchPress > debounceDelay) {
+        lastSwitchPress = millis();
 
-        if (variantIndex < 9) {
-            variantIndex++;
-        } else {
-            variantIndex = 0; // Zurück zur ersten Variante
-        }
-
+        variantIndex = (variantIndex + 1) % 10;  // Cycle through 10 variants
         secondsDisplayVariant = secondsVariants[variantIndex];
-        autoRotate = false; // Falls aktiv, wird die Rotation deaktiviert
+        autoRotate = false;  // Disable auto-rotate when manually changing
 
-        Serial.print("Variante gewechselt zu: ");
+        Serial.print("🔄 Variant changed to: ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
+
+        // KM Start: Save Seconds Settings Separately
+        saveSecondsSettings();
+      // KM End
     }
-    // KM End
+
 
     // KM Start: Switch 2 - Schaltet zwischen Rotation AN/AUS und ändert Rotationszeit
     static int rotationTimes[] = {60000, 120000, 300000, 600000}; // 1, 2, 5, 10 Minuten
     static int rotationIndex = 0; // Startwert für die Rotation-Zeit
 
-        if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
-        lastSwitchPress = currentMillis;
+        if (!digitalRead(SWITCH_2) && millis() - lastSwitchPress > debounceDelay) {
+            lastSwitchPress = millis();
 
-        rotationIndex = (rotationIndex + 1) % 5; // 5 options (0-4)
-        
-        Serial.print("Rotation mode changed to: ");
-        
-        int modeNumber;
-        if (rotationIndex == 0) {  // Rotation OFF
-            Serial.println("OFF");
-            autoRotate = false;
-            modeNumber = 1;  // Show LED 1 when rotation is OFF
-        } else {
-            autoRotate = true;
-            Serial.print(rotationTimes[rotationIndex - 1] / 60000);
-            Serial.println(" minutes");
-            modeNumber = rotationIndex + 1; // Shift numbering (LED 2–5)
+            rotationIndex = (rotationIndex + 1) % 5; 
+
+            if (rotationIndex == 0) {
+                autoRotate = false;
+                Serial.println("Rotation OFF");
+            } else {
+                autoRotate = true;
+                Serial.print("Rotation changed to every ");
+                Serial.print(rotationTimes[rotationIndex - 1] / 60000);
+                Serial.println(" minutes.");
+            }
+
+            showRotationMode(rotationIndex);
+
+            // KM Start: Save Seconds Settings Separately
+            saveSecondsSettings();
+            // KM End
         }
 
-        // KM Start: Display corresponding LED for rotation setting
-        showRotationMode(modeNumber);
-        // KM End
-    }
 
     // KM End
 
     // KM Start: Automatische Rotation (wenn aktiviert)
     static unsigned long lastVariantChange = 0;
-    if (autoRotate && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
+
+    if (autoRotate && millis() - lastVariantChange >= rotationTimes[rotationIndex]) {
         lastVariantChange += rotationTimes[rotationIndex];
-        variantIndex = (variantIndex + 1) % 10; // Schaltet durch alle Varianten (0-9)
+        variantIndex = (variantIndex + 1) % 10; // Cycle through variants
 
         secondsDisplayVariant = secondsVariants[variantIndex];
 
-        Serial.print("Automatische Rotation: Variante ");
+        Serial.print("🔄 Auto-Rotation: Variant ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
-    }
-    // KM End
 
-    // KM Start: Präzise Sekundenaktualisierung
-    static unsigned long lastSecondUpdate = 0;
-    if (millis() - lastSecondUpdate >= 1000) { // Alle 1 Sekunde
-        lastSecondUpdate += 1000;
-        updateSecondsLED(iSecond, secondsDisplayVariant);
+        // KM Start: Save Seconds Settings Separately
+        saveSecondsSettings();
+        // KM End
     }
+
     // KM End
 
     // Standard Code für WLAN, Webserver, etc.
@@ -543,6 +548,38 @@ void writeEEPROM() {
   }
   EEPROM.commit();
 }
+
+// KM Start: Save Seconds Display Settings Separately
+void saveSecondsSettings() {
+    Serial.println("🔄 Saving Seconds Settings to EEPROM...");
+
+    EEPROM.begin(512); // Ensure EEPROM is initialized
+
+    EEPROM.write(EEPROM_SECONDS_START, EEPROM_FLAG);  // Store magic flag
+    EEPROM.write(EEPROM_SECONDS_START + 1, secondsDisplayVariant);
+    EEPROM.write(EEPROM_SECONDS_START + 2, variantIndex);
+    EEPROM.write(EEPROM_SECONDS_START + 3, autoRotate ? 1 : 0);
+
+    EEPROM.commit();  // Save changes to EEPROM
+
+    Serial.println("✅ Seconds Settings saved!");
+}
+// KM End
+
+// KM Start: Load Seconds Display Settings from EEPROM
+void loadSecondsSettings() {
+    EEPROM.begin(512);  // Ensure EEPROM is initialized
+
+    if (EEPROM.read(EEPROM_SECONDS_START) == EEPROM_FLAG) {  // Check magic flag
+        secondsDisplayVariant = EEPROM.read(EEPROM_SECONDS_START + 1);
+        variantIndex = EEPROM.read(EEPROM_SECONDS_START + 2);
+        autoRotate = EEPROM.read(EEPROM_SECONDS_START + 3) == 1;
+        Serial.println("✅ Loaded Seconds Settings from EEPROM!");
+    } else {
+        Serial.println("⚠️ No valid Seconds Settings found in EEPROM, using defaults.");
+    }
+}
+// KM End
 
 
 // ###########################################################################################################################################
@@ -1700,6 +1737,15 @@ void checkClient() {
               // ####################
               writeEEPROM();    // save DATA to EEPROM
               configNTPTime();  // Reset NTP
+              // KM Start: Reload Seconds Settings and Refresh LEDs
+              loadSecondsSettings();  // Ensure seconds settings are reloaded after Web UI save
+              updateSecondsLED(iSecond, secondsDisplayVariant);
+              secondsStrip.show();
+              // Manually refresh the loop to ensure LED update
+              lastVariantChange = millis();  // Reset the timer for auto-rotation (prevents delay)
+              Serial.println("✅ Seconds LEDs refreshed after Web UI save");
+              // KM End
+              // KM End
             }
             currentLine = "";  // Clear the current command line
           }
