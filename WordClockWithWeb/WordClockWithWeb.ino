@@ -266,7 +266,7 @@ void loop() {
         lastSwitchPress = millis();
 
         variantIndex = (variantIndex + 1) % 10;  // Cycle through 10 variants
-        secondsDisplayVariant = variantIndex;
+        secondsDisplayVariant = secondsVariants[variantIndex];
         autoRotate = false;  // Disable auto-rotate when manually changing
 
         Serial.print("🔄 Variant changed to: ");
@@ -317,7 +317,7 @@ void loop() {
         lastVariantChange += rotationTimes[rotationIndex];
         variantIndex = (variantIndex + 1) % 10; // Cycle through variants
 
-        secondsDisplayVariant = variantIndex;
+        secondsDisplayVariant = secondsVariants[variantIndex];
 
         Serial.print("🔄 Auto-Rotation: Variant ");
         Serial.println(secondsDisplayVariant);
