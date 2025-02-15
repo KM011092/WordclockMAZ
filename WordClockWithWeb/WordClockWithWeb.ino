@@ -143,6 +143,12 @@ struct parmRec {
   int pDEspecial1;
   char pTimeZone[50];
   char pNTPServer[50];
+
+  // KM Start: Add Variant and Rotation Settings
+  int pVariantIndex;  // Stores the last selected variantIndex
+  int pRotationIndex; // Stores the last selected rotationIndex
+  // KM End
+
   int pCheckSum;  // This checkSum is used to find out whether we have valid parameters
 } parameter;
 
@@ -151,70 +157,89 @@ struct parmRec {
 // # Setup function that runs once at startup of the ESP:
 // ###########################################################################################################################################
 void setup() {
-  Serial.begin(115200);
-   // KM Start: Switch-Pins als Input mit Pullup setzen
+    Serial.begin(115200);
+    
+    // KM Start: Switch-Pins als Input mit Pullup setzen
     pinMode(SWITCH_1, INPUT_PULLUP);
     pinMode(SWITCH_2, INPUT_PULLUP);
     Serial.println("Sekundenanzeige-Steuerung mit Switchen aktiv!");
     // KM End
 
-  delay(500);
-  Serial.println("######################################################################");
-  Serial.print("# WordClock startup of version: ");
-  Serial.println(WORD_CLOCK_VERSION);
-  Serial.println("######################################################################");
-  // KM Start: Initialize the seconds LED strip
-  secondsStrip.begin();
-  secondsStrip.setBrightness(intensity); // Match day brightness initially
-  secondsStrip.show(); // Clear the LEDs on the seconds strip
-  // KM End 
-  
-  dunkel();                         // Switch display black
-  pixels.begin();                   // Init the NeoPixel library
-  readEEPROM();                     // get persistent data from EEPROM
-  pixels.setBrightness(intensity);  // Set LED brightness
-  // KM Start
-  secondsStrip.setBrightness(intensity);
-  // KM end
-  DisplayTest();                    // Perform the LED test
-  SetWLAN();                        // Show SET WLAN text
-  WIFI_login();                     // WiFiManager
-  if (useshowip) showIP();          // Show IP-address on display
+    delay(500);
+    Serial.println("######################################################################");
+    Serial.print("# WordClock startup of version: ");
+    Serial.println(WORD_CLOCK_VERSION);
+    Serial.println("######################################################################");
 
-  if (useupdate) {  // Local web update function setup
-    MDNS.begin(wchostname + wchostnamenum);
-    httpUpdater.setup(&httpServer);
-    httpServer.begin();
-    MDNS.addService("http", "tcp", 2022);
-    MDNS.addService("http", "tcp", 80);
-    UpdatePath = "http://" + String(wchostname + wchostnamenum) + ".local:2022/update";
-    UpdatePathIP = "http://" + WiFi.localIP().toString() + ":2022/update";
-  }
-  server.begin();
+    // KM Start: Initialize the seconds LED strip
+    secondsStrip.begin();
+    secondsStrip.setBrightness(intensity);  // Match day brightness initially
+    secondsStrip.show();  // Clear the LEDs on the seconds strip
+    // KM End 
 
-  // REST function web server:
-  if (useresturl) {
-    server1.reset(new ESP8266WebServer(WiFi.localIP(), server1port));
-    server1->on("/", handleRoot);
-    server1->on("/ledson", ledsON);
-    server1->on("/ledsoff", ledsOFF);
-    server1->on("/clockrestart", ClockRestart);
-    server1->on("/clockwifireset", ClockWifiReset);
-    server1->on("/ledstatus", LedStatus);
-    server1->on("/esphttpupdate", esphttpupdate);
-    server1->begin();
-  }
+    dunkel();  // Switch display black
+    pixels.begin();  // Init the NeoPixel library
+    readEEPROM();  // Get persistent data from EEPROM
 
-  setLanguage(switchLangWeb);          // Load set language
-  if (useupdate == 2) readhttpfile();  // Check for updates on the http server if automatic update function used
+    // KM Start: Validate and apply stored values
+    if (variantIndex < 0 || variantIndex > 9) variantIndex = 0;
+    if (rotationIndex < 0 || rotationIndex > 4) rotationIndex = 0;
 
-  Serial.println("######################################################################");
-  Serial.println("# WordClock startup finished...");
-  Serial.println("######################################################################");
-  Serial.print("# Configuration page now available: ");
-  Serial.println("http://" + WiFi.localIP().toString());
-  Serial.println("######################################################################");
+    Serial.print("Restored Variant from EEPROM: ");
+    Serial.println(variantIndex);
+    Serial.print("Restored Rotation from EEPROM: ");
+    Serial.println(rotationIndex);
+    // KM End
+
+    pixels.setBrightness(intensity);
+    secondsStrip.setBrightness(intensity);  // KM Ensuring brightness matches
+    
+    DisplayTest();  // Perform the LED test
+    SetWLAN();  // Show SET WLAN text
+    WIFI_login();  // WiFiManager
+
+    if (useshowip) showIP();  // Show IP-address on display
+
+    // KM Start: Web & Update Server Setup
+    if (useupdate) {
+        MDNS.begin(wchostname + wchostnamenum);
+        httpUpdater.setup(&httpServer);
+        httpServer.begin();
+        MDNS.addService("http", "tcp", 2022);
+        MDNS.addService("http", "tcp", 80);
+        UpdatePath = "http://" + String(wchostname + wchostnamenum) + ".local:2022/update";
+        UpdatePathIP = "http://" + WiFi.localIP().toString() + ":2022/update";
+    }
+    server.begin();
+    // KM End
+
+    // KM Start: REST API Setup
+    if (useresturl) {
+        server1.reset(new ESP8266WebServer(WiFi.localIP(), server1port));
+        server1->on("/", handleRoot);
+        server1->on("/ledson", ledsON);
+        server1->on("/ledsoff", ledsOFF);
+        server1->on("/clockrestart", ClockRestart);
+        server1->on("/clockwifireset", ClockWifiReset);
+        server1->on("/ledstatus", LedStatus);
+        server1->on("/esphttpupdate", esphttpupdate);
+        server1->begin();
+    }
+    // KM End
+
+    setLanguage(switchLangWeb);  // Load selected language
+    if (useupdate == 2) readhttpfile();  // Check for updates if automatic update is enabled
+
+    Serial.println("######################################################################");
+    Serial.println("# WordClock startup finished.");
+    Serial.println("######################################################################");
+    Serial.print("# Configuration page now available: ");
+    Serial.println("http://" + WiFi.localIP().toString());
+    Serial.println("######################################################################");
 }
+// ############ END Setup
+
+
 // KM Rotation Mode
 void showRotationMode(int mode) {
     pixels.clear();  // Clear the display
@@ -249,69 +274,67 @@ void showRotationMode(int mode) {
 // # Loop function which runs all the time after the startup was done:
 // ###########################################################################################################################################
 void loop() {
-    ESP.wdtFeed();  // Watchdog Timer zurücksetzen
+    ESP.wdtFeed();  // ✅ Reset watchdog timer
     unsigned long currentMillis = millis();
 
-    // KM Start: Switch 1 - Schaltet durch ALLE Varianten (0–9)
+    // KM Start: Apply EEPROM values only AFTER first second update
+    static bool appliedEEPROMValues = false;
+    if (!appliedEEPROMValues) {
+        appliedEEPROMValues = true;
+        Serial.println("Applying EEPROM values inside loop...");
+        secondsDisplayVariant = secondsVariants[variantIndex];
+        Serial.print("Final Applied Variant: ");
+        Serial.println(secondsDisplayVariant);
+    }
+    // KM End
+
+    // KM Start: Switch 1 - Change Variant
     if (!digitalRead(SWITCH_1) && currentMillis - lastSwitchPress > debounceDelay) {
         lastSwitchPress = currentMillis;
 
-        if (variantIndex < 9) {
-            variantIndex++;
-        } else {
-            variantIndex = 0; // Zurück zur ersten Variante
-        }
-
+        variantIndex = (variantIndex + 1) % 10;  // Cycle through 0-9
         secondsDisplayVariant = secondsVariants[variantIndex];
-        autoRotate = false; // Falls aktiv, wird die Rotation deaktiviert
+        autoRotate = false;  // Disable auto-rotation if manually changed
 
-        Serial.print("Variante gewechselt zu: ");
+        Serial.print("Variant Changed: ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
+        writeEEPROM();  // KM: Save updated variant to EEPROM
     }
     // KM End
 
-    // KM Start: Switch 2 - Schaltet zwischen Rotation AN/AUS und ändert Rotationszeit
-    static int rotationTimes[] = {60000, 120000, 300000, 600000}; // 1, 2, 5, 10 Minuten
-    static int rotationIndex = 0; // Startwert für die Rotation-Zeit
-
-        if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
+    // KM Start: Switch 2 - Change Rotation Mode
+    if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
         lastSwitchPress = currentMillis;
 
-        rotationIndex = (rotationIndex + 1) % 5; // 5 options (0-4)
-        
-        Serial.print("Rotation mode changed to: ");
-        
-        int modeNumber;
-        if (rotationIndex == 0) {  // Rotation OFF
+        rotationIndex = (rotationIndex + 1) % 5;  // Cycle through 0-4
+
+        Serial.print("Rotation Mode Changed: ");
+        if (rotationIndex == 0) {
             Serial.println("OFF");
             autoRotate = false;
-            modeNumber = 1;  // Show LED 1 when rotation is OFF
         } else {
             autoRotate = true;
             Serial.print(rotationTimes[rotationIndex - 1] / 60000);
             Serial.println(" minutes");
-            modeNumber = rotationIndex + 1; // Shift numbering (LED 2–5)
         }
 
-        // KM Start: Display corresponding LED for rotation setting
-        showRotationMode(modeNumber);
-        // KM End
+        showRotationMode(rotationIndex);
+        writeEEPROM();  // KM: Save updated rotation mode to EEPROM
     }
-
     // KM End
 
-    // KM Start: Automatische Rotation (wenn aktiviert)
+    // KM Start: Automatic Variant Rotation (if enabled)
     static unsigned long lastVariantChange = 0;
     if (autoRotate && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
-        lastVariantChange += rotationTimes[rotationIndex];
-        variantIndex = (variantIndex + 1) % 10; // Schaltet durch alle Varianten (0-9)
+        lastVariantChange = currentMillis;
+        variantIndex = (variantIndex + 1) % 10;
 
         secondsDisplayVariant = secondsVariants[variantIndex];
 
-        Serial.print("Automatische Rotation: Variante ");
+        Serial.print("Auto-Rotation: Variant ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
@@ -319,15 +342,16 @@ void loop() {
     }
     // KM End
 
-    // KM Start: Präzise Sekundenaktualisierung
+    // KM Start: Precise Seconds Update
     static unsigned long lastSecondUpdate = 0;
-    if (millis() - lastSecondUpdate >= 1000) { // Alle 1 Sekunde
-        lastSecondUpdate += 1000;
+    if (currentMillis - lastSecondUpdate >= 1000) {  // Every 1 second
+        lastSecondUpdate = currentMillis;
         updateSecondsLED(iSecond, secondsDisplayVariant);
+        pixels.show();  // Ensure LED updates are displayed
     }
     // KM End
 
-    // Standard Code für WLAN, Webserver, etc.
+    // Standard Code for WiFi, Webserver, etc.
     if (WiFi.status() != WL_CONNECTED) {
         WIFI_login();
     } else {
@@ -356,112 +380,119 @@ void loop() {
         httpServer.handleClient();
         MDNS.update();
         if (PING_USEMONITOR == 1) PingIP();
+        if (useresturl) server1->handleClient();
         if (LEDsON && RESTmanLEDsON) pixels.show();
     }
-
-    if (useresturl) server1->handleClient();
 }
-
-
-
 
 
 // ###########################################################################################################################################
 // # Try to read settings from FLASH - initialize if WLAN ID read from flash is invalid:
 // ###########################################################################################################################################
 void readEEPROM() {
-  //Serial.print("Copy ");
-  //Serial.print(sizeof(parameter));
-  //Serial.println(" bytes from flash memory to EPROM buffer: ");
+    ESP.wdtFeed();  // ✅ Reset watchdog timer before reading EEPROM
+    Serial.println("Reading settings from EEPROM...");
 
-  // initialize space to read parameter
-  EEPROM.begin(sizeof(parameter));
-  delay(10);
+    EEPROM.begin(sizeof(parameter));
+    delay(10);
 
-  // Copy bytes from EEPROM
-  byte* p = (byte*)(void*)&parameter;
+    byte* p = (byte*)(void*)&parameter;
+    int check = 0;
+    for (int L = 0; L < sizeof(parameter); ++L) {
+        byte b = EEPROM.read(L);
+        if (L < sizeof(parameter) - sizeof(parameter.pCheckSum))
+            check += b;
+        *p++ = b;
 
-  int check = 0;
-  for (int L = 0; L < sizeof(parameter); ++L) {
-    byte b = EEPROM.read(L);
+        // KM Start: Read EEPROM in smaller chunks to prevent watchdog resets
+        if (L % 16 == 0) ESP.wdtFeed();
+        // KM End
+    }
 
-    // Don't take the checkSum itself into account
-    if (L < sizeof(parameter) - sizeof(parameter.pCheckSum))
-      check = check + b;
+    Serial.print("Stored Checksum: "); Serial.println(parameter.pCheckSum);
+    Serial.print("Calculated Checksum: "); Serial.println(check);
 
-    *p++ = b;
-    /*  Serial.print("Read FLASH Byte ");
-      Serial.print(L);
-      Serial.print(" = ");
-      Serial.println(b);  */
-  }
+    if (check == parameter.pCheckSum) {
+        Serial.println("Checksum matches, restoring settings.");
 
-  // Check checksum
-  //Serial.print("Compare checksums: ");
-  //Serial.print(check);
-  //Serial.print("/");
-  //Serial.println(parameter.pCheckSum);
+        // KM Start: Restore all original settings
+        redVal = parameter.pRed;
+        greenVal = parameter.pGreen;
+        blueVal = parameter.pBlue;
+        showDate = parameter.pShowDate;
+        displayoff = parameter.pdisplayoff;
+        useNightLEDs = parameter.puseNightLEDs;
+        displayonmaxMO = parameter.pdisplayonmaxMO;
+        displayonminMO = parameter.pdisplayonminMO;
+        displayonmaxTU = parameter.pdisplayonmaxTU;
+        displayonminTU = parameter.pdisplayonminTU;
+        displayonmaxWE = parameter.pdisplayonmaxWE;
+        displayonminWE = parameter.pdisplayonminWE;
+        displayonmaxTH = parameter.pdisplayonmaxTH;
+        displayonminTH = parameter.pdisplayonminTH;
+        displayonmaxFR = parameter.pdisplayonmaxFR;
+        displayonminFR = parameter.pdisplayonminFR;
+        displayonmaxSA = parameter.pdisplayonmaxSA;
+        displayonminSA = parameter.pdisplayonminSA;
+        displayonmaxSU = parameter.pdisplayonmaxSU;
+        displayonminSU = parameter.pdisplayonminSU;
+        wchostnamenum = parameter.pwchostnamenum;
+        useupdate = parameter.puseupdate;
+        useresturl = parameter.puseresturl;
+        powersupply = parameter.ppowersupply;
+        useledtest = parameter.puseledtest;
+        usesetwlan = parameter.pusesetwlan;
+        useshowip = parameter.puseshowip;
+        switchRainBow = parameter.pswitchRainBow;
+        switchLangWeb = parameter.pswitchLangWeb;
+        switchLEDOrder = parameter.pswitchLEDOrder;
+        blinkTime = parameter.pBlinkTime;
+        DEspecial1 = parameter.pDEspecial1;
+        dcwFlag = parameter.pDCWFlag;
+        useRTC = parameter.puseRTC;
+        intensity = parameter.pIntensity;
+        intensityNight = parameter.pIntensityNight;
+        PING_IP_ADDR1_O1 = parameter.pPING_IP_ADDR1_O1;
+        PING_IP_ADDR1_O2 = parameter.pPING_IP_ADDR1_O2;
+        PING_IP_ADDR1_O3 = parameter.pPING_IP_ADDR1_O3;
+        PING_IP_ADDR1_O4 = parameter.pPING_IP_ADDR1_O4;
+        PING_IP_ADDR2_O1 = parameter.pPING_IP_ADDR2_O1;
+        PING_IP_ADDR2_O2 = parameter.pPING_IP_ADDR2_O2;
+        PING_IP_ADDR2_O3 = parameter.pPING_IP_ADDR2_O3;
+        PING_IP_ADDR2_O4 = parameter.pPING_IP_ADDR2_O4;
+        PING_IP_ADDR3_O1 = parameter.pPING_IP_ADDR3_O1;
+        PING_IP_ADDR3_O2 = parameter.pPING_IP_ADDR3_O2;
+        PING_IP_ADDR3_O3 = parameter.pPING_IP_ADDR3_O3;
+        PING_IP_ADDR3_O4 = parameter.pPING_IP_ADDR3_O4;
+        PING_TIMEOUTNUM = parameter.pPING_TIMEOUTNUM;
+        PING_DEBUG_MODE = parameter.pPING_DEBUG_MODE;
+        PING_USEMONITOR = parameter.pPING_USEMONITOR;
+        String ntp(parameter.pNTPServer);
+        ntpServer = ntp;
+        String tz(parameter.pTimeZone);
+        timeZone = tz;
 
-  if (check == parameter.pCheckSum) {
-    // Serial.println("Checksum does match. Get parameter values from EEPROM");
-    redVal = parameter.pRed;
-    greenVal = parameter.pGreen;
-    blueVal = parameter.pBlue;
-    showDate = parameter.pShowDate;
-    displayoff = parameter.pdisplayoff;
-    useNightLEDs = parameter.puseNightLEDs;
-    displayonmaxMO = parameter.pdisplayonmaxMO;
-    displayonminMO = parameter.pdisplayonminMO;
-    displayonmaxTU = parameter.pdisplayonmaxTU;
-    displayonminTU = parameter.pdisplayonminTU;
-    displayonmaxWE = parameter.pdisplayonmaxWE;
-    displayonminWE = parameter.pdisplayonminWE;
-    displayonmaxTH = parameter.pdisplayonmaxTH;
-    displayonminTH = parameter.pdisplayonminTH;
-    displayonmaxFR = parameter.pdisplayonmaxFR;
-    displayonminFR = parameter.pdisplayonminFR;
-    displayonmaxSA = parameter.pdisplayonmaxSA;
-    displayonminSA = parameter.pdisplayonminSA;
-    displayonmaxSU = parameter.pdisplayonmaxSU;
-    displayonminSU = parameter.pdisplayonminSU;
-    wchostnamenum = parameter.pwchostnamenum;
-    useupdate = parameter.puseupdate;
-    useresturl = parameter.puseresturl;
-    powersupply = parameter.ppowersupply;
-    useledtest = parameter.puseledtest;
-    usesetwlan = parameter.pusesetwlan;
-    useshowip = parameter.puseshowip;
-    switchRainBow = parameter.pswitchRainBow;
-    switchLangWeb = parameter.pswitchLangWeb;
-    switchLEDOrder = parameter.pswitchLEDOrder;
-    blinkTime = parameter.pBlinkTime;
-    DEspecial1 = parameter.pDEspecial1;
-    dcwFlag = parameter.pDCWFlag;
-    useRTC = parameter.puseRTC;
-    intensity = parameter.pIntensity;
-    intensityNight = parameter.pIntensityNight;
-    PING_IP_ADDR1_O1 = parameter.pPING_IP_ADDR1_O1;
-    PING_IP_ADDR1_O2 = parameter.pPING_IP_ADDR1_O2;
-    PING_IP_ADDR1_O3 = parameter.pPING_IP_ADDR1_O3;
-    PING_IP_ADDR1_O4 = parameter.pPING_IP_ADDR1_O4;
-    PING_IP_ADDR2_O1 = parameter.pPING_IP_ADDR2_O1;
-    PING_IP_ADDR2_O2 = parameter.pPING_IP_ADDR2_O2;
-    PING_IP_ADDR2_O3 = parameter.pPING_IP_ADDR2_O3;
-    PING_IP_ADDR2_O4 = parameter.pPING_IP_ADDR2_O4;
-    PING_IP_ADDR3_O1 = parameter.pPING_IP_ADDR3_O1;
-    PING_IP_ADDR3_O2 = parameter.pPING_IP_ADDR3_O2;
-    PING_IP_ADDR3_O3 = parameter.pPING_IP_ADDR3_O3;
-    PING_IP_ADDR3_O4 = parameter.pPING_IP_ADDR3_O4;
-    PING_TIMEOUTNUM = parameter.pPING_TIMEOUTNUM;
-    PING_DEBUG_MODE = parameter.pPING_DEBUG_MODE;
-    PING_USEMONITOR = parameter.pPING_USEMONITOR;
-    String ntp(parameter.pNTPServer);
-    ntpServer = ntp;
-    String tz(parameter.pTimeZone);
-    timeZone = tz;
-  } else {
-    Serial.println("Checksum does not match. New program version or new installed ESP detected...");
-  }
+        // ✅ Restore new settings for variantIndex & rotationIndex
+        variantIndex = parameter.pVariantIndex;
+        rotationIndex = parameter.pRotationIndex;
+
+        // ✅ Prevent invalid values
+        if (variantIndex < 0 || variantIndex > 9) variantIndex = 0;
+        if (rotationIndex < 0 || rotationIndex > 4) rotationIndex = 0;
+
+        Serial.print("Restored Variant: "); Serial.println(variantIndex);
+        Serial.print("Restored Rotation: "); Serial.println(rotationIndex);
+        // KM End
+
+    } else {
+        Serial.println("🚨 Checksum mismatch detected! Skipping reset to default settings.");
+        // KM Start: Don't overwrite EEPROM immediately, let the UI set new values
+        variantIndex = 0;
+        rotationIndex = 0;
+        // KM End
+    }
+
+    ESP.wdtFeed();  // ✅ Reset watchdog timer again after reading EEPROM
 }
 
 
@@ -469,79 +500,90 @@ void readEEPROM() {
 // # Write current parameter settings to flash:
 // ###########################################################################################################################################
 void writeEEPROM() {
-  //Serial.println("Write parameter into EEPROM");
-  parameter.pRed = redVal;
-  parameter.pGreen = greenVal;
-  parameter.pBlue = blueVal;
-  parameter.pIntensity = intensity;
-  parameter.pIntensityNight = intensityNight;
-  parameter.pDCWFlag = dcwFlag;
-  parameter.puseRTC = useRTC;
-  parameter.pBlinkTime = blinkTime;
-  parameter.pDEspecial1 = DEspecial1;
-  ntpServer.toCharArray(parameter.pNTPServer, sizeof(parameter.pNTPServer));
-  timeZone.toCharArray(parameter.pTimeZone, sizeof(parameter.pTimeZone));
-  parameter.pShowDate = showDate;
-  parameter.pdisplayoff = displayoff;
-  parameter.puseNightLEDs = useNightLEDs;
-  parameter.pdisplayonmaxMO = displayonmaxMO;
-  parameter.pdisplayonminMO = displayonminMO;
-  parameter.pdisplayonmaxTU = displayonmaxTU;
-  parameter.pdisplayonminTU = displayonminTU;
-  parameter.pdisplayonmaxWE = displayonmaxWE;
-  parameter.pdisplayonminWE = displayonminWE;
-  parameter.pdisplayonmaxTH = displayonmaxTH;
-  parameter.pdisplayonminTH = displayonminTH;
-  parameter.pdisplayonmaxFR = displayonmaxFR;
-  parameter.pdisplayonminFR = displayonminFR;
-  parameter.pdisplayonmaxSA = displayonmaxSA;
-  parameter.pdisplayonminSA = displayonminSA;
-  parameter.pdisplayonmaxSU = displayonmaxSU;
-  parameter.pdisplayonminSU = displayonminSU;
-  parameter.pwchostnamenum = wchostnamenum;
-  parameter.puseupdate = useupdate;
-  parameter.puseresturl = useresturl;
-  parameter.ppowersupply = powersupply;
-  parameter.puseledtest = useledtest;
-  parameter.pusesetwlan = usesetwlan;
-  parameter.puseshowip = useshowip;
-  parameter.pswitchRainBow = switchRainBow;
-  parameter.pswitchLangWeb = switchLangWeb;
-  parameter.pswitchLEDOrder = switchLEDOrder;
-  parameter.pPING_IP_ADDR1_O1 = PING_IP_ADDR1_O1;
-  parameter.pPING_IP_ADDR1_O2 = PING_IP_ADDR1_O2;
-  parameter.pPING_IP_ADDR1_O3 = PING_IP_ADDR1_O3;
-  parameter.pPING_IP_ADDR1_O4 = PING_IP_ADDR1_O4;
-  parameter.pPING_IP_ADDR2_O1 = PING_IP_ADDR2_O1;
-  parameter.pPING_IP_ADDR2_O2 = PING_IP_ADDR2_O2;
-  parameter.pPING_IP_ADDR2_O3 = PING_IP_ADDR2_O3;
-  parameter.pPING_IP_ADDR2_O4 = PING_IP_ADDR2_O4;
-  parameter.pPING_IP_ADDR3_O1 = PING_IP_ADDR3_O1;
-  parameter.pPING_IP_ADDR3_O2 = PING_IP_ADDR3_O2;
-  parameter.pPING_IP_ADDR3_O3 = PING_IP_ADDR3_O3;
-  parameter.pPING_IP_ADDR3_O4 = PING_IP_ADDR3_O4;
-  parameter.pPING_TIMEOUTNUM = PING_TIMEOUTNUM;
-  parameter.pPING_DEBUG_MODE = PING_DEBUG_MODE;
-  parameter.pPING_USEMONITOR = PING_USEMONITOR;
+    Serial.println("Writing settings to EEPROM...");
 
-  // calculate checksum
-  byte* p = (byte*)(void*)&parameter;
-  parameter.pCheckSum = 0;
-  for (int L = 0; L < sizeof(parameter) - sizeof(parameter.pCheckSum); ++L) {
-    byte b = *p++;
-    parameter.pCheckSum = parameter.pCheckSum + b;
-  }
-  // Write data to EEPROM
-  p = (byte*)(void*)&parameter;
-  for (int L = 0; L < sizeof(parameter); ++L) {
-    byte b = *p++;
-    EEPROM.write(L, b);
-    // Serial.print("Write FLASH Byte ");
-    // Serial.print(L);
-    // Serial.print(" = ");
-    // Serial.println(b);
-  }
-  EEPROM.commit();
+    // Store existing parameters
+    parameter.pRed = redVal;
+    parameter.pGreen = greenVal;
+    parameter.pBlue = blueVal;
+    parameter.pIntensity = intensity;
+    parameter.pIntensityNight = intensityNight;
+    parameter.pDCWFlag = dcwFlag;
+    parameter.puseRTC = useRTC;
+    parameter.pBlinkTime = blinkTime;
+    parameter.pDEspecial1 = DEspecial1;
+
+    // Store network settings
+    ntpServer.toCharArray(parameter.pNTPServer, sizeof(parameter.pNTPServer));
+    timeZone.toCharArray(parameter.pTimeZone, sizeof(parameter.pTimeZone));
+
+    parameter.pShowDate = showDate;
+    parameter.pdisplayoff = displayoff;
+    parameter.puseNightLEDs = useNightLEDs;
+    parameter.pdisplayonmaxMO = displayonmaxMO;
+    parameter.pdisplayonminMO = displayonminMO;
+    parameter.pdisplayonmaxTU = displayonmaxTU;
+    parameter.pdisplayonminTU = displayonminTU;
+    parameter.pdisplayonmaxWE = displayonmaxWE;
+    parameter.pdisplayonminWE = displayonminWE;
+    parameter.pdisplayonmaxTH = displayonmaxTH;
+    parameter.pdisplayonminTH = displayonminTH;
+    parameter.pdisplayonmaxFR = displayonmaxFR;
+    parameter.pdisplayonminFR = displayonminFR;
+    parameter.pdisplayonmaxSA = displayonmaxSA;
+    parameter.pdisplayonminSA = displayonminSA;
+    parameter.pdisplayonmaxSU = displayonmaxSU;
+    parameter.pdisplayonminSU = displayonminSU;
+    parameter.pwchostnamenum = wchostnamenum;
+    parameter.puseupdate = useupdate;
+    parameter.puseresturl = useresturl;
+    parameter.ppowersupply = powersupply;
+    parameter.puseledtest = useledtest;
+    parameter.pusesetwlan = usesetwlan;
+    parameter.puseshowip = useshowip;
+    parameter.pswitchRainBow = switchRainBow;
+    parameter.pswitchLangWeb = switchLangWeb;
+    parameter.pswitchLEDOrder = switchLEDOrder;
+    parameter.pPING_IP_ADDR1_O1 = PING_IP_ADDR1_O1;
+    parameter.pPING_IP_ADDR1_O2 = PING_IP_ADDR1_O2;
+    parameter.pPING_IP_ADDR1_O3 = PING_IP_ADDR1_O3;
+    parameter.pPING_IP_ADDR1_O4 = PING_IP_ADDR1_O4;
+    parameter.pPING_IP_ADDR2_O1 = PING_IP_ADDR2_O1;
+    parameter.pPING_IP_ADDR2_O2 = PING_IP_ADDR2_O2;
+    parameter.pPING_IP_ADDR2_O3 = PING_IP_ADDR2_O3;
+    parameter.pPING_IP_ADDR2_O4 = PING_IP_ADDR2_O4;
+    parameter.pPING_IP_ADDR3_O1 = PING_IP_ADDR3_O1;
+    parameter.pPING_IP_ADDR3_O2 = PING_IP_ADDR3_O2;
+    parameter.pPING_IP_ADDR3_O3 = PING_IP_ADDR3_O3;
+    parameter.pPING_IP_ADDR3_O4 = PING_IP_ADDR3_O4;
+    parameter.pPING_TIMEOUTNUM = PING_TIMEOUTNUM;
+    parameter.pPING_DEBUG_MODE = PING_DEBUG_MODE;
+    parameter.pPING_USEMONITOR = PING_USEMONITOR;
+
+    // KM Start: Store variantIndex and rotationIndex
+    parameter.pVariantIndex = variantIndex;
+    parameter.pRotationIndex = rotationIndex;
+    Serial.print("Saving Variant Index: "); Serial.println(variantIndex);
+    Serial.print("Saving Rotation Index: "); Serial.println(rotationIndex);
+    // KM End
+
+    // Calculate checksum
+    byte* p = (byte*)(void*)&parameter;
+    parameter.pCheckSum = 0;
+    for (int L = 0; L < sizeof(parameter) - sizeof(parameter.pCheckSum); ++L) {
+        byte b = *p++;
+        parameter.pCheckSum += b;
+    }
+
+    // Write data to EEPROM
+    p = (byte*)(void*)&parameter;
+    for (int L = 0; L < sizeof(parameter); ++L) {
+        EEPROM.write(L, *p++);
+    }
+
+    // Commit changes
+    EEPROM.commit();
+    Serial.println("EEPROM Save Complete.");
 }
 
 
