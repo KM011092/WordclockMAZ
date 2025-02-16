@@ -289,19 +289,18 @@ void loop() {
     // KM End
 
     // KM Start: Switch 1 - Change Variant
-    if (!digitalRead(SWITCH_1) && currentMillis - lastSwitchPress > debounceDelay) {
-        lastSwitchPress = currentMillis;
+    if (!digitalRead(SWITCH_1) && millis() - lastSwitchPress > debounceDelay) {
+        lastSwitchPress = millis();
 
-        variantIndex = (variantIndex + 1) % 10;  // Cycle through 0-9
-        secondsDisplayVariant = secondsVariants[variantIndex];
-        autoRotate = false;  // Disable auto-rotation if manually changed
+        variantIndex = (variantIndex + 1) % MAX_SECONDS_VARIANTS;
+        secondsDisplayVariant = variantIndex;
 
         Serial.print("Variant Changed: ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
-        writeEEPROM();  // KM: Save updated variant to EEPROM
+        writeEEPROM();
     }
     // KM End
 
@@ -389,24 +388,19 @@ void loop() {
 // ###########################################################################################################################################
 // # Try to read settings from FLASH - initialize if WLAN ID read from flash is invalid:
 // ###########################################################################################################################################
+// KM Start: Updated readEEPROM function ensuring EEPROM validity
 void readEEPROM() {
-    ESP.wdtFeed();  // ✅ Reset watchdog timer before reading EEPROM
     Serial.println("Reading settings from EEPROM...");
 
     EEPROM.begin(sizeof(parameter));
-    delay(10);
+    EEPROM.get(0, parameter);
 
+    // Calculate checksum
     byte* p = (byte*)(void*)&parameter;
     int check = 0;
-    for (int L = 0; L < sizeof(parameter); ++L) {
-        byte b = EEPROM.read(L);
-        if (L < sizeof(parameter) - sizeof(parameter.pCheckSum))
-            check += b;
-        *p++ = b;
-
-        // KM Start: Read EEPROM in smaller chunks to prevent watchdog resets
-        if (L % 16 == 0) ESP.wdtFeed();
-        // KM End
+    for (int L = 0; L < sizeof(parameter) - sizeof(parameter.pCheckSum); ++L) {
+        byte b = *p++;
+        check += b;
     }
 
     Serial.print("Stored Checksum: "); Serial.println(parameter.pCheckSum);
@@ -415,7 +409,6 @@ void readEEPROM() {
     if (check == parameter.pCheckSum) {
         Serial.println("Checksum matches, restoring settings.");
 
-        // KM Start: Restore all original settings
         redVal = parameter.pRed;
         greenVal = parameter.pGreen;
         blueVal = parameter.pBlue;
@@ -452,53 +445,31 @@ void readEEPROM() {
         useRTC = parameter.puseRTC;
         intensity = parameter.pIntensity;
         intensityNight = parameter.pIntensityNight;
-        PING_IP_ADDR1_O1 = parameter.pPING_IP_ADDR1_O1;
-        PING_IP_ADDR1_O2 = parameter.pPING_IP_ADDR1_O2;
-        PING_IP_ADDR1_O3 = parameter.pPING_IP_ADDR1_O3;
-        PING_IP_ADDR1_O4 = parameter.pPING_IP_ADDR1_O4;
-        PING_IP_ADDR2_O1 = parameter.pPING_IP_ADDR2_O1;
-        PING_IP_ADDR2_O2 = parameter.pPING_IP_ADDR2_O2;
-        PING_IP_ADDR2_O3 = parameter.pPING_IP_ADDR2_O3;
-        PING_IP_ADDR2_O4 = parameter.pPING_IP_ADDR2_O4;
-        PING_IP_ADDR3_O1 = parameter.pPING_IP_ADDR3_O1;
-        PING_IP_ADDR3_O2 = parameter.pPING_IP_ADDR3_O2;
-        PING_IP_ADDR3_O3 = parameter.pPING_IP_ADDR3_O3;
-        PING_IP_ADDR3_O4 = parameter.pPING_IP_ADDR3_O4;
-        PING_TIMEOUTNUM = parameter.pPING_TIMEOUTNUM;
-        PING_DEBUG_MODE = parameter.pPING_DEBUG_MODE;
-        PING_USEMONITOR = parameter.pPING_USEMONITOR;
-        String ntp(parameter.pNTPServer);
-        ntpServer = ntp;
-        String tz(parameter.pTimeZone);
-        timeZone = tz;
 
-        // ✅ Restore new settings for variantIndex & rotationIndex
-        variantIndex = parameter.pVariantIndex;
-        rotationIndex = parameter.pRotationIndex;
-
-        // ✅ Prevent invalid values
-        if (variantIndex < 0 || variantIndex > 9) variantIndex = 0;
-        if (rotationIndex < 0 || rotationIndex > 4) rotationIndex = 0;
-
-        Serial.print("Restored Variant: "); Serial.println(variantIndex);
-        Serial.print("Restored Rotation: "); Serial.println(rotationIndex);
+        // KM Start: Restore seconds variant safely
+        if (parameter.pVariantIndex < 0 || parameter.pVariantIndex >= MAX_SECONDS_VARIANTS) {
+            variantIndex = 0;
+        } else {
+            variantIndex = parameter.pVariantIndex;
+        }
+        Serial.print("Restored Variant: ");
+        Serial.println(variantIndex);
         // KM End
 
     } else {
-        Serial.println("🚨 Checksum mismatch detected! Skipping reset to default settings.");
-        // KM Start: Don't overwrite EEPROM immediately, let the UI set new values
+        Serial.println("🚨 Checksum mismatch detected! Resetting settings.");
         variantIndex = 0;
-        rotationIndex = 0;
-        // KM End
     }
 
-    ESP.wdtFeed();  // ✅ Reset watchdog timer again after reading EEPROM
+    EEPROM.end();
 }
+// KM End
 
 
 // ###########################################################################################################################################
 // # Write current parameter settings to flash:
 // ###########################################################################################################################################
+// KM Start: Updated writeEEPROM function with dynamic variant handling
 void writeEEPROM() {
     Serial.println("Writing settings to EEPROM...");
 
@@ -544,6 +515,7 @@ void writeEEPROM() {
     parameter.pswitchRainBow = switchRainBow;
     parameter.pswitchLangWeb = switchLangWeb;
     parameter.pswitchLEDOrder = switchLEDOrder;
+
     parameter.pPING_IP_ADDR1_O1 = PING_IP_ADDR1_O1;
     parameter.pPING_IP_ADDR1_O2 = PING_IP_ADDR1_O2;
     parameter.pPING_IP_ADDR1_O3 = PING_IP_ADDR1_O3;
@@ -560,11 +532,11 @@ void writeEEPROM() {
     parameter.pPING_DEBUG_MODE = PING_DEBUG_MODE;
     parameter.pPING_USEMONITOR = PING_USEMONITOR;
 
-    // KM Start: Store variantIndex and rotationIndex
+    // KM Start: Store seconds variant safely
+    if (variantIndex < 0 || variantIndex >= MAX_SECONDS_VARIANTS) variantIndex = 0;
     parameter.pVariantIndex = variantIndex;
-    parameter.pRotationIndex = rotationIndex;
-    Serial.print("Saving Variant Index: "); Serial.println(variantIndex);
-    Serial.print("Saving Rotation Index: "); Serial.println(rotationIndex);
+    Serial.print("Saving Variant Index: ");
+    Serial.println(variantIndex);
     // KM End
 
     // Calculate checksum
@@ -577,6 +549,7 @@ void writeEEPROM() {
 
     // Write data to EEPROM
     p = (byte*)(void*)&parameter;
+    EEPROM.begin(sizeof(parameter));
     for (int L = 0; L < sizeof(parameter); ++L) {
         EEPROM.write(L, *p++);
     }
@@ -585,6 +558,7 @@ void writeEEPROM() {
     EEPROM.commit();
     Serial.println("EEPROM Save Complete.");
 }
+// KM End
 
 
 // ###########################################################################################################################################
@@ -1805,16 +1779,14 @@ void rtcReadTime() {
 // # KM Function to update iSecondsLED
 // #############################################################################################################
 
-// KM Start: Updated updateSecondsLED function ensuring smooth transitions from second 60 to 1
+// KM Start: Updated updateSecondsLED function ensuring smooth transitions and automatic handling
 void updateSecondsLED(int second, int secondsDisplayVariant) {
     secondsStrip.clear(); // Turn off all LEDs
-
     unsigned long currentMillis = millis();
-    int timeInSecond = currentMillis % 1000; // Time within the current second (0-999)
 
     // Handle random selection of effect if the variant is set to a dynamic mode
     if (secondsDisplayVariant == 99) { // Special case for randomized effect
-        secondsDisplayVariant = random(0, 21); // Choose a random variant from the available set
+        secondsDisplayVariant = random(0, MAX_SECONDS_VARIANTS); // Choose a random variant from the available set
     }
 
     switch (secondsDisplayVariant) {
@@ -1822,78 +1794,67 @@ void updateSecondsLED(int second, int secondsDisplayVariant) {
             secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
             break;
 
-        case 1: { // RainbowSeconds - Only the Current Second is Lit
+        case 1: { // RainbowSeconds - Static
             uint32_t color = secondsStrip.ColorHSV(((second * 65536 / 60)) % 65536, 255, 255);
             secondsStrip.setPixelColor(second, color);
             break;
         }
 
-case 2: { // Single Color Fill-Up Effect with Fading Reset
-    static bool isFading = false; // Track if fade-out is running
+        case 2: { // Single Color Fill-Up Effect with Fading Reset
+            static bool isFading = false;
 
-    if (second == 0 && !isFading) { 
-        isFading = true; // Start fade-out process
-        
-        // Smooth fade-out from second 60 to 0
-        for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
-            for (int i = 0; i < 60; i++) {
-                secondsStrip.setPixelColor(i, (redVal * fadeLevel) / 255, 
-                                              (greenVal * fadeLevel) / 255, 
-                                              (blueVal * fadeLevel) / 255);
+            if (second == 0 && !isFading) { 
+                isFading = true;
+                for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
+                    for (int i = 0; i < 60; i++) {
+                        secondsStrip.setPixelColor(i, (redVal * fadeLevel) / 255, 
+                                                      (greenVal * fadeLevel) / 255, 
+                                                      (blueVal * fadeLevel) / 255);
+                    }
+                    secondsStrip.show();
+                    delay(15);
+                }
+                secondsStrip.clear();
+            } 
+
+            if (second > 0) { 
+                isFading = false;
+                for (int i = 0; i < second; i++) {
+                    secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
+                }
             }
-            secondsStrip.show();
-            delay(15); // Adjusted speed for a smoother effect
+            break;
         }
-        
-        secondsStrip.clear();
-    } 
-    
-    if (second > 0) { 
-        isFading = false; // Reset flag after fade-out completes
-        
-        // Turn on LEDs progressively
-        for (int i = 0; i < second; i++) {
-            secondsStrip.setPixelColor(i, redVal, greenVal, blueVal);
-        }
-    }
-    break;
-}
 
-case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
-    static bool isFading = false; // Track fade-out process
+        case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
+            static bool isFading = false;
 
-    if (second == 0 && !isFading) { 
-        isFading = true; // Start fade-out
-        
-        // Gradual fade-out over 200ms
-        for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
-            for (int i = 0; i < 60; i++) {
-                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, fadeLevel);
-                secondsStrip.setPixelColor(i, color);
+            if (second == 0 && !isFading) { 
+                isFading = true;
+                for (int fadeLevel = 255; fadeLevel >= 0; fadeLevel -= 10) {
+                    for (int i = 0; i < 60; i++) {
+                        uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, fadeLevel);
+                        secondsStrip.setPixelColor(i, color);
+                    }
+                    secondsStrip.show();
+                    delay(15);
+                }
+                secondsStrip.clear();
+            } 
+
+            if (second > 0) { 
+                isFading = false;
+                for (int i = 0; i < second; i++) {
+                    uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
+                    secondsStrip.setPixelColor(i, color);
+                }
             }
-            secondsStrip.show();
-            delay(15); // Smooth transition
+            break;
         }
 
-        secondsStrip.clear();
-    } 
-    
-    if (second > 0) { 
-        isFading = false; // Reset fade-out flag
-        
-        // Turn on LEDs progressively with RainbowSeconds colors
-        for (int i = 0; i < second; i++) {
-            uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
-            secondsStrip.setPixelColor(i, color);
-        }
-    }
-    break;
-}
-
-
-        case 4: { // White Second with Smooth Single-Color Fading Trail
+        case 4: { // Single Color Fading Trail
             for (int i = 0; i < 10; i++) {
-                int ledIndex = (second - i + 60) % 60; // Ensure wraparound
+                int ledIndex = (second - i + 60) % 60;
                 uint8_t brightnessFactor = 255 * pow(0.7, i);
                 secondsStrip.setPixelColor(ledIndex, (redVal * brightnessFactor) / 255, 
                                                       (greenVal * brightnessFactor) / 255, 
@@ -1903,7 +1864,7 @@ case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
             break;
         }
 
-        case 5: { // White Second with Smooth RainbowSeconds Fading Trail
+        case 5: { // Rainbow Fading Trail
             for (int i = 0; i < 10; i++) {
                 int ledIndex = (second - i + 60) % 60;
                 uint8_t brightnessFactor = 255 * pow(0.7, i);
@@ -1914,18 +1875,16 @@ case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
             break;
         }
 
-        case 6: { // **Single Color Progressive Fill-up in Blocks of 5**
+        case 6: { // Progressive Fill-Up in Blocks of 5 (Single Color)
             static int lastBlockStart = -1;
             int blockStart = (second / 5) * 5;
-            int currentLed = second % 5; // Position within the block
+            int currentLed = second % 5;
 
-            // If entering a new block (S6, S11, S16, etc.), turn off the previous one
             if (blockStart != lastBlockStart) {
                 secondsStrip.clear();
                 lastBlockStart = blockStart;
             }
 
-            // Light up progressively within the 5-LED block
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 secondsStrip.setPixelColor(ledIndex, redVal, greenVal, blueVal);
@@ -1933,18 +1892,16 @@ case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
             break;
         }
 
-        case 7: { // **Rainbow Progressive Fill-up in Blocks of 5**
+        case 7: { // Progressive Fill-Up in Blocks of 5 (Rainbow)
             static int lastBlockStart = -1;
             int blockStart = (second / 5) * 5;
-            int currentLed = second % 5; // Position within the block
+            int currentLed = second % 5;
 
-            // If entering a new block (S6, S11, S16, etc.), turn off the previous one
             if (blockStart != lastBlockStart) {
                 secondsStrip.clear();
                 lastBlockStart = blockStart;
             }
 
-            // Light up progressively within the 5-LED block in rainbow colors
             for (int i = 0; i <= currentLed; i++) {
                 int ledIndex = (blockStart + i) % 60;
                 uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, 255);
@@ -1952,71 +1909,124 @@ case 3: { // RainbowSeconds Fill-Up Effect with Fading Reset
             }
             break;
         }
-        case 8: { // Full-Spectrum Rotating RainbowSeconds Effect (2 Seconds per Rotation with White Second Indicator)
-            unsigned long cycleTime = 2000; // Complete cycle in 2 seconds
-            uint16_t hueShift = (millis() % cycleTime) * 65536 / cycleTime; // Calculate shifting hue dynamically
+
+        // KM Start: New rainbow-based second variants with correct numbering after removing duplicates
+
+        case 8: { // 🌈 Rotating Rainbow Wheel with White Second Indicator
+            unsigned long cycleTime = 8000; // Full cycle every 2 seconds
+            uint16_t hueShift = (millis() % cycleTime) * 65536 / cycleTime;
 
             for (int i = 0; i < 60; i++) {
                 uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60) + hueShift) % 65536, 255, 255);
                 secondsStrip.setPixelColor(i, color);
             }
 
-            // Highlight the real second in white
+            // Highlight the current second in white
             secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
         }
-        
-        
-        case 9: { // Moving Rainbow Wave Pushing the Current Second (Extended Travel)
-            static int waveStart = -20;  // Start wave 20 LEDs before the second
-            static int lastSecond = -1;
-            static int waveSpeed = 2; // Increase speed (LEDs per update)
 
-            // Reset wave position when a new second starts
-            if (second != lastSecond) {
-                lastSecond = second;
-                waveStart = second - 20; // Place the wave further away from the second
+        case 9: { // 🌊 Rainbow Ripple Effect
+            int rippleSize = 5; // How many LEDs around the second get affected
+
+            for (int i = 0; i < 60; i++) {
+                int distance = abs(i - second);
+                uint8_t brightness = max(0, 255 - (distance * (255 / rippleSize)));
+                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, brightness);
+                secondsStrip.setPixelColor(i, color);
             }
 
-            secondsStrip.clear(); // Turn off all LEDs
+            // Highlight the current second in white
+            secondsStrip.setPixelColor(second, 255, 255, 255);
+            break;
+        }
 
-            // Move the 8-LED wave toward the current second
-            bool waveCompleted = false;
-            for (int i = 0; i < 8; i++) {
-                int ledIndex = (waveStart + i + 60) % 60; 
+        case 10: { // 🚀 Pulsing Rainbow Second
+            static uint8_t pulse = 0;
+            static int direction = 5;
+            pulse += direction;
+            if (pulse >= 255 || pulse <= 50) direction = -direction;
 
-                if (ledIndex == second) {
-                    waveCompleted = true; // Stop the wave when it reaches the second
-                    break;
+            for (int i = 0; i < 60; i++) {
+                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
+                secondsStrip.setPixelColor(i, color);
+            }
+
+            // Pulse the brightness of the current second
+            secondsStrip.setPixelColor(second, pulse, pulse, pulse);
+            break;
+        }
+
+        case 11: { // ⚡ Lightning Strike Effect
+            static unsigned long lastStrike = 0;
+            static bool strikeActive = false;
+
+            if (millis() - lastStrike > random(3000, 8000)) { // Random strike every 3-8 seconds
+                lastStrike = millis();
+                strikeActive = true;
+            }
+
+            for (int i = 0; i < 60; i++) {
+                uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
+                secondsStrip.setPixelColor(i, color);
+            }
+
+            // Current second in white
+            secondsStrip.setPixelColor(second, 255, 255, 255);
+
+            // Simulate a quick lightning strike
+            if (strikeActive) {
+                int strikePos = random(0, 60);
+                for (int i = -2; i <= 2; i++) {
+                    int index = (strikePos + i + 60) % 60;
+                    secondsStrip.setPixelColor(index, 255, 255, 255);
                 }
-
-                uint32_t color = secondsStrip.ColorHSV(((ledIndex * 65536 / 60)) % 65536, 255, 255);
-                secondsStrip.setPixelColor(ledIndex, color);
+                strikeActive = false; // Reset after one frame
             }
-
-            // Light up the current second in white
-            secondsStrip.setPixelColor(second, 255, 255, 255);
-
-            // Move the wave faster, so it covers more distance
-            if (!waveCompleted) {
-                waveStart += waveSpeed;  // Move faster to reach the second
-            }
-
-            secondsStrip.show();
             break;
         }
 
+        case 12: { // 🎆 Fireworks Burst
+            static unsigned long burstStart = 0;
+            static int burstSize = 0;
 
+            if (millis() - burstStart > 1000) { // Every new second, restart the burst
+                burstStart = millis();
+                burstSize = 0;
+            }
 
-        default: // Default case if variant is not recognized
-            secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
+            for (int i = 0; i < 60; i++) {
+                int distance = abs(i - second);
+                if (distance <= burstSize) {
+                    uint32_t color = secondsStrip.ColorHSV(((i * 65536 / 60)) % 65536, 255, 255);
+                    secondsStrip.setPixelColor(i, color);
+                }
+            }
+
+            // Expand the burst over time
+            if (millis() - burstStart < 500) burstSize++;
+            else burstSize = 0;
+
+            // Keep the current second in bright white
+            secondsStrip.setPixelColor(second, 255, 255, 255);
             break;
-    }
+        }
 
-    secondsStrip.setBrightness(intensity);
-    secondsStrip.show();
-}
-// KM End
+        
+        // KM End
+
+
+
+        // ############################ End cases ###############################
+                default:
+                    secondsStrip.setPixelColor(second, redVal, greenVal, blueVal);
+                    break;
+            }
+
+            secondsStrip.setBrightness(intensity);
+            secondsStrip.show();
+        }
+        // KM End
 
 
 
@@ -2553,12 +2563,25 @@ void showDCW() {
 // # Display the time:
 // ###########################################################################################################################################
 void ShowTheTime() {
-  if ((iMinute == 30) && (iSecond == 0)) {
-    if (showDate)
-      showCurrentDate();
-  }
-  showCurrentTime();
-  showDCW();
+    static bool displayingDate = false;
+
+    // KM Start: Stop displaying seconds while showing the date
+    if ((iMinute == 30) && (iSecond == 0)) {
+        if (showDate) {
+            displayingDate = true;
+            secondsStrip.clear(); // Turn off seconds display
+            secondsStrip.show();
+            showCurrentDate();
+            displayingDate = false;
+        }
+    }
+
+    if (!displayingDate) {
+        showCurrentTime();  // Ensure the clock resumes showing words
+        showDCW();
+        updateSecondsLED(iSecond, secondsDisplayVariant); // Resume seconds display
+    }
+    // KM End
 }
 
 

@@ -38,13 +38,14 @@ int RTC_I2C_ADDRESS = 0x68;  // I2C adress of the RTC  DS3231 (Chip on ZS-042 Bo
 #define SECONDS_NUMPIXELS 60     // Number of LEDs in the seconds strip
 Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ800);
 // KM Start: Switch-Pins definieren
-#define SWITCH_1 D2  // GPIO14
-#define SWITCH_2 D5  // GPIO4
+#define SWITCH_1 D5  // GPIO4
+#define SWITCH_2 D2  // GPIO14
 #define LED_MODE_1  10  // LED for "Rotation OFF"
 #define LED_MODE_2  9  // LED for "1-minute rotation"
 #define LED_MODE_3  8  // LED for "2-minute rotation"
 #define LED_MODE_4  7  // LED for "5-minute rotation"
 #define LED_MODE_5  6  // LED for "10-minute rotation"
+#define MAX_SECONDS_VARIANTS 13  // Update this only when adding new effects - Nr. cases in updateled + 1
 // Kategorien für die Sekundenanzeige + Automatische Rotation
 enum SecondsCategory {
     SINGLE_COLOR,   // Einfarbig (redVal, greenVal, blueVal)
