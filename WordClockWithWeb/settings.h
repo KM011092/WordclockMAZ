@@ -59,10 +59,13 @@ int secondsVariants[] = {0, 2, 4, 6,   // Einfarbige Varianten
                          8, 9};        // Dynamischer Regenbogen
 
 int variantIndex = 0;  // Index in der Liste der Varianten
+int rotationIndex = 0;
 unsigned long lastSwitchPress = 0; // Entprellung der Switche
 const int debounceDelay = 200; // 200ms Entprellzeit
 unsigned long lastVariantChange = 0; // Timer für die Rotation
 bool autoRotate = false;  // Automatische Rotation standardmäßig deaktiviert
+
+const int rotationTimes[] = {60000, 120000, 300000, 600000}; // 1, 2, 5, 10 minutes
 
 // KM End
 
