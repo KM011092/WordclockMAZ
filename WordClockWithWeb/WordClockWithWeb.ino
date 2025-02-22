@@ -163,6 +163,10 @@ void setup() {
     pinMode(SWITCH_1, INPUT_PULLUP);
     pinMode(SWITCH_2, INPUT_PULLUP);
     Serial.println("Sekundenanzeige-Steuerung mit Switchen aktiv!");
+    // KM Start: Print time source status at startup
+    displayStartupTimeSourceStatus();
+    // KM End
+
     // KM End
 
     delay(500);
@@ -287,7 +291,13 @@ void loop() {
         Serial.println(secondsDisplayVariant);
     }
     // KM End
-
+    // KM Start: Check for simultaneous press of both switches to reset RTC usage
+    if (!digitalRead(SWITCH_1) && !digitalRead(SWITCH_2) && (millis() - lastSwitchPress > debounceDelay)) {
+        lastSwitchPress = millis();  // update debounce timer
+        resetRTCUsage();
+        Serial.println("Both switches pressed: RTC reset triggered.");
+    }
+    // KM End
     // KM Start: Switch 1 - Change Variant
     if (!digitalRead(SWITCH_1) && millis() - lastSwitchPress > debounceDelay) {
         lastSwitchPress = millis();
@@ -324,7 +334,7 @@ void loop() {
         writeEEPROM();  // KM: Save updated rotation mode to EEPROM
     }
     // KM End
-
+    
     // KM Start: Automatic Variant Rotation (if enabled)
     static unsigned long lastVariantChange = 0;
     if (autoRotate && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
@@ -2479,67 +2489,48 @@ void rtcWriteTime(int jahr, int monat, int tag, int stunde, int minute, int seku
 // # Handle the time from the NTP server and write it to the RTC:
 // ###########################################################################################################################################
 void handleTime() {
-  int timedebug = 0;
-  // Check, whether we are connected to WLAN
-  if ((WiFi.status() == WL_CONNECTED)) {
-    time_t now;
-    time(&now);  // read the current time
-    struct tm ti;
-    localtime_r(&now, &ti);
-    uint16_t ye = ti.tm_year + 1900;
-    uint8_t mo = ti.tm_mon + 1;
-    uint8_t da = ti.tm_mday;
-    int ho = ti.tm_hour;
-    int mi = ti.tm_min;
-    int sec = ti.tm_sec;
-    if (checkRTC() && useRTC == 1) {
-      int i = ti.tm_year + ti.tm_mon + ti.tm_mday + ti.tm_hour;
-      if (i != lastRequest) {
-        if (timedebug == 1) Serial.print("Set RTC to current time: ");
-        lastRequest = i;
-        // check for update
-        if (timedebug == 1) Serial.print("WITH RTC: ");
-        iYear = ye;
-        iMonth = mo;
-        iDay = da;
-        iHour = ho;
-        iMinute = mi;
-        iSecond = sec;
-        if (checkRTC() && useRTC == 1) rtcWriteTime(ye, mo, da, ho, mi, sec);
-      }
+  // KM Start: Updated decoupled time update function with internal increment even when using RTC
+  static unsigned long lastSecondMillis = 0;  // Last time we updated the counter
+  static bool rtcSyncedThisMinute = false;      // Ensure we sync from the RTC only once per minute
+
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastSecondMillis >= 1000) {  // every second
+    lastSecondMillis += 1000;
+    
+    // Always increment the internal time counter
+    if (iSecond < 59) {
+      iSecond++;
     } else {
-      // NTP TIME WITHOUT RTC:
-      if (timedebug == 1) Serial.print("WITHOUT RTC: ");
-      iYear = ye;
-      iMonth = mo;
-      iDay = da;
-      iHour = ho;
-      iMinute = mi;
-      iSecond = sec;
+      iSecond = 0;
+      if (iMinute < 59) {
+        iMinute++;
+      } else {
+        iMinute = 0;
+        if (iHour < 23) {
+          iHour++;
+        } else {
+          iHour = 0;
+          // Day rollover (and updating day/month/year) is not handled here for simplicity.
+        }
+      }
     }
-    // KM Start
-    // Update iSecondLED and seconds LEDs
-    iSecondLED = sec;  // Use the current second for the seconds LEDs
-    updateSecondsLED(iSecondLED, secondsDisplayVariant);  // Call the function to update the seconds LEDs
-    // KM End
-
-    if (timedebug == 1) {
-      Serial.print(ho);
-      Serial.print(':');
-      Serial.print(mi);
-      Serial.print(':');
-      Serial.print(sec);
-      Serial.print(" ");
-      Serial.print(ye);
-      Serial.print('-');
-      Serial.print(mo);
-      Serial.print('-');
-      Serial.println(da);
+    
+    // If RTC is enabled, synchronize at the start of each minute only once
+    if (useRTC && checkRTC()) {
+      if (iSecond == 0 && !rtcSyncedThisMinute) {
+        rtcReadTime();  // Update internal time variables from the RTC
+        rtcSyncedThisMinute = true;
+      } else if (iSecond != 0) {
+        rtcSyncedThisMinute = false;  // Reset the sync flag once we move away from the minute boundary
+      }
     }
+    
+    // Update the seconds LED value using our internal counter
+    iSecondLED = iSecond;
+    updateSecondsLED(iSecondLED, secondsDisplayVariant);
   }
-  if (checkRTC() && useRTC == 1) rtcReadTime();
+  // KM End
 }
-
 
 // ###########################################################################################################################################
 // # Every Hour blink orange DCW - if switched on:
@@ -3399,7 +3390,34 @@ void readhttpfile() {
     }
   }
 }
+// KM Start: Function to reset and re-enable RTC mode
+void resetRTCUsage() {
+  // Set useRTC to 1 so that the system will attempt to use the RTC
+  useRTC = 1;
+  // Reset the rtcStarted flag to force reinitialization of the RTC module
+  rtcStarted = 0;
+  
+  // Try to reinitialize and read from the RTC
+  if (checkRTC()) {
+    rtcReadTime();  // Update the internal time from the RTC
+    Serial.println("RTC has been re-enabled and synchronized.");
+  } else {
+    Serial.println("RTC not detected. Please check your module connection.");
+  }
+  
+  // Optionally, update EEPROM with the new useRTC value here if you want it to persist.
+}
+// KM End
 
+// KM Start: Function to display the active time source at startup
+void displayStartupTimeSourceStatus() {
+  if (useRTC && checkRTC()) {
+    Serial.println("Startup: Clock running on RTC mode.");
+  } else {
+    Serial.println("Startup: Clock running on NTP mode.");
+  }
+}
+// KM End
 
 // ###########################################################################################################################################
 // # EOF - You have successfully reached the end of the code - well done ;-)
