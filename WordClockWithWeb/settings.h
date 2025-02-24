@@ -39,7 +39,7 @@ int RTC_I2C_ADDRESS = 0x68;  // I2C adress of the RTC  DS3231 (Chip on ZS-042 Bo
 Adafruit_NeoPixel secondsStrip(SECONDS_NUMPIXELS, SECONDS_PIN, NEO_GRB + NEO_KHZ800);
 // KM Start: Switch-Pins definieren
 #define SWITCH_1 D5  // GPIO4
-#define SWITCH_2 D2  // GPIO14
+#define SWITCH_2 D3  // GPIO14
 #define LED_MODE_1  10  // LED for "Rotation OFF"
 #define LED_MODE_2  9  // LED for "1-minute rotation"
 #define LED_MODE_3  8  // LED for "2-minute rotation"
@@ -60,7 +60,7 @@ int secondsVariants[] = {0, 2, 4, 6,   // Einfarbige Varianten
                          8, 9};        // Dynamischer Regenbogen
 
 int variantIndex = 0;  // Index in der Liste der Varianten
-int rotationIndex = 0;
+int rotationIndex = 3;
 unsigned long lastSwitchPress = 0; // Entprellung der Switche
 const int debounceDelay = 200; // 200ms Entprellzeit
 unsigned long lastVariantChange = 0; // Timer für die Rotation
