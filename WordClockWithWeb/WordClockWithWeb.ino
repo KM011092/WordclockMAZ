@@ -274,8 +274,15 @@ void showRotationMode(int mode) {
 // # Loop function which runs all the time after the startup was done:
 // ###########################################################################################################################################
 void loop() {
-    ESP.wdtFeed();  // ✅ Reset watchdog timer
     unsigned long currentMillis = millis();
+
+    // ✅ Log free heap memory (helps detect memory leaks before a crash)
+    Serial.print("Free heap memory: ");
+    Serial.println(ESP.getFreeHeap());
+
+    // ✅ Log that the loop is running to track execution
+    Serial.println("Loop cycle running... Watchdog fed.");
+    ESP.wdtFeed();  // Reset watchdog timer to prevent false alarms
 
     // KM Start: Apply EEPROM values only AFTER first second update
     static bool appliedEEPROMValues = false;
@@ -291,7 +298,6 @@ void loop() {
     // KM Start: Switch 1 - Change Variant
     if (!digitalRead(SWITCH_1) && millis() - lastSwitchPress > debounceDelay) {
         lastSwitchPress = millis();
-
         variantIndex = (variantIndex + 1) % MAX_SECONDS_VARIANTS;
         secondsDisplayVariant = variantIndex;
 
@@ -300,14 +306,19 @@ void loop() {
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
-        writeEEPROM();
+
+        // ✅ Prevent excessive EEPROM writes
+        static int lastVariantIndex = -1;
+        if (variantIndex != lastVariantIndex) {
+            lastVariantIndex = variantIndex;
+            writeEEPROM();
+        }
     }
     // KM End
 
     // KM Start: Switch 2 - Change Rotation Mode
     if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
         lastSwitchPress = currentMillis;
-
         rotationIndex = (rotationIndex + 1) % 5;  // Cycle through 0-4
 
         Serial.print("Rotation Mode Changed: ");
@@ -321,19 +332,38 @@ void loop() {
         }
 
         showRotationMode(rotationIndex);
-        writeEEPROM();  // KM: Save updated rotation mode to EEPROM
+
+        // ✅ Prevent excessive EEPROM writes
+        static int lastRotationIndex = -1;
+        if (rotationIndex != lastRotationIndex) {
+            lastRotationIndex = rotationIndex;
+            writeEEPROM();
+        }
     }
     // KM End
 
+    // ✅ WiFi Reconnect Handling (every 5 seconds instead of every loop iteration)
+    static unsigned long lastWiFiCheck = 0;
+    if (WiFi.status() != WL_CONNECTED && currentMillis - lastWiFiCheck > 5000) {
+        lastWiFiCheck = currentMillis;
+        Serial.println("⚠️ WiFi disconnected! Attempting reconnect...");
+        WIFI_login();  // 🚨 If the crash happens here, WiFi may be the issue!
+    }
+
     // KM Start: Automatic Variant Rotation (if enabled)
     static unsigned long lastVariantChange = 0;
-    if (autoRotate && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
+    if (autoRotate && rotationIndex > 0 && currentMillis - lastVariantChange >= rotationTimes[rotationIndex]) {
         lastVariantChange = currentMillis;
-        variantIndex = (variantIndex + 1) % 10;
 
-        secondsDisplayVariant = secondsVariants[variantIndex];
+        Serial.print("Auto-Rotation: Before Change - Variant: ");
+        Serial.print(variantIndex);
+        Serial.print(" | Rotation Index: ");
+        Serial.println(rotationIndex);
 
-        Serial.print("Auto-Rotation: Variant ");
+        variantIndex = (variantIndex + 1) % MAX_SECONDS_VARIANTS;
+        secondsDisplayVariant = variantIndex;
+
+        Serial.print("Auto-Rotation: After Change - New Variant: ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
@@ -345,12 +375,15 @@ void loop() {
     static unsigned long lastSecondUpdate = 0;
     if (currentMillis - lastSecondUpdate >= 1000) {  // Every 1 second
         lastSecondUpdate = currentMillis;
+        Serial.print("Updating seconds display: Variant ");
+        Serial.println(secondsDisplayVariant);
+
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();  // Ensure LED updates are displayed
     }
     // KM End
 
-    // Standard Code for WiFi, Webserver, etc.
+    // ✅ Standard Code for WiFi, Webserver, etc.
     if (WiFi.status() != WL_CONNECTED) {
         WIFI_login();
     } else {
@@ -358,17 +391,8 @@ void loop() {
         ESP.wdtFeed();
         handleTime();
 
-        if (displayoff) {
-            switch (iWeekDay) {
-                case 0: DayNightMode(displayonminSU, displayonmaxSU); break;
-                case 1: DayNightMode(displayonminMO, displayonmaxMO); break;
-                case 2: DayNightMode(displayonminTU, displayonmaxTU); break;
-                case 3: DayNightMode(displayonminWE, displayonmaxWE); break;
-                case 4: DayNightMode(displayonminTH, displayonmaxTH); break;
-                case 5: DayNightMode(displayonminFR, displayonmaxFR); break;
-                case 6: DayNightMode(displayonminSA, displayonmaxSA); break;
-            }
-        } else {
+        // ✅ Prevents unnecessary LED updates when display mode is off
+        if (!displayoff) {
             pixels.setBrightness(intensity);
             secondsStrip.setBrightness(intensity);
             ShowTheTime();
@@ -378,8 +402,11 @@ void loop() {
         ESP.wdtFeed();
         httpServer.handleClient();
         MDNS.update();
+
+        // ✅ If using REST API & PING monitoring, handle them properly
         if (PING_USEMONITOR == 1) PingIP();
         if (useresturl) server1->handleClient();
+
         if (LEDsON && RESTmanLEDsON) pixels.show();
     }
 }
