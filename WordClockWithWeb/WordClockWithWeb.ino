@@ -180,6 +180,8 @@ void setup() {
     dunkel();  // Switch display black
     pixels.begin();  // Init the NeoPixel library
     readEEPROM();  // Get persistent data from EEPROM
+    Serial.print("🔄 Restored Rotation Index after Boot: ");
+    Serial.println(rotationIndex);
 
     // KM Start: Validate and apply stored values
     if (variantIndex < 0 || variantIndex > 9) variantIndex = 0;
@@ -295,20 +297,23 @@ void loop() {
     }
     // KM End
 
+    // KM Start: Store last known values to prevent unnecessary EEPROM writes
+    static int lastRotationIndex = -1;
+    static int lastVariantIndex = -1;
+
     // KM Start: Switch 1 - Change Variant
     if (!digitalRead(SWITCH_1) && millis() - lastSwitchPress > debounceDelay) {
         lastSwitchPress = millis();
         variantIndex = (variantIndex + 1) % MAX_SECONDS_VARIANTS;
         secondsDisplayVariant = variantIndex;
 
-        Serial.print("Variant Changed: ");
+        Serial.print("🟢 Variant Changed: ");
         Serial.println(secondsDisplayVariant);
 
         updateSecondsLED(iSecond, secondsDisplayVariant);
         pixels.show();
 
-        // ✅ Prevent excessive EEPROM writes
-        static int lastVariantIndex = -1;
+        // ✅ Only write to EEPROM if the variant actually changed
         if (variantIndex != lastVariantIndex) {
             lastVariantIndex = variantIndex;
             writeEEPROM();
@@ -317,11 +322,11 @@ void loop() {
     // KM End
 
     // KM Start: Switch 2 - Change Rotation Mode
-    if (!digitalRead(SWITCH_2) && currentMillis - lastSwitchPress > debounceDelay) {
-        lastSwitchPress = currentMillis;
+    if (!digitalRead(SWITCH_2) && millis() - lastSwitchPress > debounceDelay) {
+        lastSwitchPress = millis();
         rotationIndex = (rotationIndex + 1) % 5;  // Cycle through 0-4
 
-        Serial.print("Rotation Mode Changed: ");
+        Serial.print("🟢 Rotation Mode Changed: ");
         if (rotationIndex == 0) {
             Serial.println("OFF");
             autoRotate = false;
@@ -333,8 +338,7 @@ void loop() {
 
         showRotationMode(rotationIndex);
 
-        // ✅ Prevent excessive EEPROM writes
-        static int lastRotationIndex = -1;
+        // ✅ Only write to EEPROM if the rotation mode actually changed
         if (rotationIndex != lastRotationIndex) {
             lastRotationIndex = rotationIndex;
             writeEEPROM();
@@ -417,7 +421,7 @@ void loop() {
 // ###########################################################################################################################################
 // KM Start: Updated readEEPROM function ensuring EEPROM validity
 void readEEPROM() {
-    Serial.println("Reading settings from EEPROM...");
+    Serial.println("🔍 Reading settings from EEPROM...");
 
     EEPROM.begin(sizeof(parameter));
     EEPROM.get(0, parameter);
@@ -434,7 +438,7 @@ void readEEPROM() {
     Serial.print("Calculated Checksum: "); Serial.println(check);
 
     if (check == parameter.pCheckSum) {
-        Serial.println("Checksum matches, restoring settings.");
+        Serial.println("✅ Checksum matches, restoring settings.");
 
         redVal = parameter.pRed;
         greenVal = parameter.pGreen;
@@ -479,18 +483,28 @@ void readEEPROM() {
         } else {
             variantIndex = parameter.pVariantIndex;
         }
-        Serial.print("Restored Variant: ");
+        Serial.print("✅ Restored Variant: ");
         Serial.println(variantIndex);
         // KM End
+
+        // ✅ Restore rotationIndex safely
+        if (parameter.pRotationIndex < 0 || parameter.pRotationIndex > 4) {
+            Serial.println("⚠️ Invalid rotationIndex in EEPROM! Resetting to last known good value.");
+            rotationIndex = 3;  // Default to 3 if an invalid value is found
+        } else {
+            rotationIndex = parameter.pRotationIndex;
+        }
+        Serial.print("✅ Restored Rotation Index: ");
+        Serial.println(rotationIndex);
 
     } else {
         Serial.println("🚨 Checksum mismatch detected! Resetting settings.");
         variantIndex = 0;
+        rotationIndex = 3;  // Ensure rotationIndex is not lost if EEPROM data is bad
     }
 
     EEPROM.end();
 }
-// KM End
 
 
 // ###########################################################################################################################################
@@ -498,7 +512,17 @@ void readEEPROM() {
 // ###########################################################################################################################################
 // KM Start: Updated writeEEPROM function with dynamic variant handling
 void writeEEPROM() {
-    Serial.println("Writing settings to EEPROM...");
+    Serial.println("💾 Writing settings to EEPROM...");
+
+    // 🚀 Track last saved values to prevent unnecessary writes
+    static int lastSavedRotationIndex = -1;
+    static int lastSavedVariantIndex = -1;
+
+    // ✅ Check if values actually changed before writing
+    if (rotationIndex == lastSavedRotationIndex && variantIndex == lastSavedVariantIndex) {
+        Serial.println("⚠️ No changes detected, skipping EEPROM write.");
+        return; // 🚫 Skip writing if values are unchanged
+    }
 
     // Store existing parameters
     parameter.pRed = redVal;
@@ -562,9 +586,22 @@ void writeEEPROM() {
     // KM Start: Store seconds variant safely
     if (variantIndex < 0 || variantIndex >= MAX_SECONDS_VARIANTS) variantIndex = 0;
     parameter.pVariantIndex = variantIndex;
-    Serial.print("Saving Variant Index: ");
+    Serial.print("✅ Saving Variant Index: ");
     Serial.println(variantIndex);
     // KM End
+
+    // ✅ Store rotationIndex safely
+    if (rotationIndex < 0 || rotationIndex > 4) {
+        Serial.println("⚠️ Invalid rotationIndex detected! Keeping last known value.");
+    } else {
+        parameter.pRotationIndex = rotationIndex;
+        Serial.print("✅ Saving Rotation Index: ");
+        Serial.println(rotationIndex);
+    }
+
+    // ✅ Update last saved values to prevent redundant writes
+    lastSavedRotationIndex = rotationIndex;
+    lastSavedVariantIndex = variantIndex;
 
     // Calculate checksum
     byte* p = (byte*)(void*)&parameter;
@@ -583,9 +620,10 @@ void writeEEPROM() {
 
     // Commit changes
     EEPROM.commit();
-    Serial.println("EEPROM Save Complete.");
+    EEPROM.end();
+    
+    Serial.println("✅ EEPROM Save Complete.");
 }
-// KM End
 
 
 // ###########################################################################################################################################
